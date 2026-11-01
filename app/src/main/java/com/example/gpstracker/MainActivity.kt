@@ -15,6 +15,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -259,11 +263,16 @@ private fun TrackerScreen() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Spacer(modifier = Modifier.weight(1f))
-            // REQ-24: starting from the record button also moves to the front view, where the session is shown.
-            RecordButton(state, onStart = { type ->
-                startSession(type)
-                show(Page.TRACKER)
-            })
+            // REQ-24: hidden on the front view, which has its own controls; its place is kept so the bar keeps its height.
+            Box(modifier = Modifier.size(RECORD_BUTTON_SIZE), contentAlignment = Alignment.Center) {
+                androidx.compose.animation.AnimatedVisibility(visible = page != Page.TRACKER, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
+                    // REQ-24: starting from the record button also moves to the front view, where the session is shown.
+                    RecordButton(state, size = RECORD_BUTTON_SIZE, onStart = { type ->
+                        startSession(type)
+                        show(Page.TRACKER)
+                    })
+                }
+            }
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
                 BarIcon(Icons.Filled.Map, "Map", selected = page == Page.MAP) { show(Page.MAP) } // REQ-7
                 BarIcon(Icons.Filled.History, "History", selected = page == Page.HISTORY) { show(Page.HISTORY) } // REQ-9
@@ -364,6 +373,9 @@ private fun BarIcon(icon: ImageVector, label: String, selected: Boolean, onClick
         Icon(icon, contentDescription = label, tint = Color.White)
     }
 }
+
+/** REQ-24: the size of the record button, larger than the icons beside it. */
+private val RECORD_BUTTON_SIZE = 60.dp
 
 /** REQ-1: the icon of an activity type in the bottom bar and the history. */
 val ActivityType.icon: ImageVector

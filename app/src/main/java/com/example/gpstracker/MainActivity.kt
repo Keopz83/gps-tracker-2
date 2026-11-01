@@ -136,6 +136,11 @@ private fun TrackerScreen() {
     }
 
     val requestPermissions = { permissionLauncher.launch(requiredPermissions(Build.VERSION.SDK_INT).toTypedArray()) }
+    // REQ-1, REQ-15: starts a session of the type picked, after the power saving note and the permissions.
+    val startSession = { type: ActivityType ->
+        selectedType = type
+        if (isGpsLimitedByPowerSaving(context)) showPowerSavingNote = true else requestPermissions()
+    }
 
     // REQ-15: power saving can switch the GPS off with the screen, so the user is asked to turn it off first.
     if (showPowerSavingNote) {
@@ -204,10 +209,7 @@ private fun TrackerScreen() {
                         lastRun = lastRun,
                         voiceNotes = settings.voiceNotes,
                         onVoiceNotes = { SettingsRepository.update(context, settings.copy(voiceNotes = it)) },
-                        onStart = { type ->
-                            selectedType = type
-                            if (isGpsLimitedByPowerSaving(context)) showPowerSavingNote = true else requestPermissions()
-                        },
+                        onStart = startSession,
                     )
                     Page.MAP -> RouteMapScreen(
                         track = mapTrack,
@@ -257,9 +259,16 @@ private fun TrackerScreen() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Spacer(modifier = Modifier.weight(1f))
-            BarIcon(Icons.Filled.Map, "Map", selected = page == Page.MAP) { show(Page.MAP) } // REQ-7
-            BarIcon(Icons.Filled.History, "History", selected = page == Page.HISTORY) { show(Page.HISTORY) } // REQ-9
-            BarIcon(Icons.Filled.Menu, "Settings", selected = page == Page.SETTINGS) { show(Page.SETTINGS) } // REQ-13
+            // REQ-24: starting from the record button also moves to the front view, where the session is shown.
+            RecordButton(state, onStart = { type ->
+                startSession(type)
+                show(Page.TRACKER)
+            })
+            Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
+                BarIcon(Icons.Filled.Map, "Map", selected = page == Page.MAP) { show(Page.MAP) } // REQ-7
+                BarIcon(Icons.Filled.History, "History", selected = page == Page.HISTORY) { show(Page.HISTORY) } // REQ-9
+                BarIcon(Icons.Filled.Menu, "Settings", selected = page == Page.SETTINGS) { show(Page.SETTINGS) } // REQ-13
+            }
         }
     }
 }

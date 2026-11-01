@@ -116,6 +116,11 @@ object TrackingRepository {
         gpxFile(filesDir, run).takeIf { it.exists() }?.let { parseGpxTrack(it.readText()) }.orEmpty()
     }
 
+    /** REQ-22: the saved GPX files of [runs] (REQ-8) to share, leaving out runs whose file is gone. */
+    suspend fun gpxFiles(filesDir: File, runs: List<RunRecord>): List<File> = withContext(Dispatchers.IO) {
+        runs.map { gpxFile(filesDir, it) }.filter { it.exists() }
+    }
+
     private fun gpxStart(filesDir: File, run: RunRecord): Pair<Double, Double>? =
         gpxFile(filesDir, run).takeIf { it.exists() }?.let { firstGpxPosition(it.readText()) }
 

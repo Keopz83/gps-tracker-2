@@ -100,3 +100,25 @@ class RunHistory(private val file: File) {
         )
     }
 }
+
+/** REQ-22: the selection of runs (by start) after a long press or, while selecting, a tap on the run starting at [startMillis]. */
+fun toggleSelection(selection: Set<Long>, startMillis: Long): Set<Long> =
+    if (startMillis in selection) selection - startMillis else selection + startMillis
+
+/** REQ-22: the selected runs still in the history, in its order; runs deleted since they were selected drop out. */
+fun selectedRuns(runs: List<RunRecord>, selection: Set<Long>): List<RunRecord> = runs.filter { it.startMillis in selection }
+
+/** REQ-22: details of a saved run read from its GPX file: its pauses, its time from start to finish and its kilometre times. */
+data class RunDetails(val pauses: Int, val totalMillis: Long, val splits: List<Long>)
+
+/** REQ-22: the details of a run from its [track] (REQ-17), or null when it has no positions. */
+fun runDetails(track: List<List<LocationFix>>): RunDetails? {
+    val segments = track.filter { it.isNotEmpty() }
+    if (segments.isEmpty()) return null
+    // REQ-12: kilometres are measured within segments, so the gap of a pause is not counted.
+    val splits = KmSplits()
+    segments.forEach { segment ->
+        segment.zipWithNext { from, to -> splits.add(haversineMeters(from, to), to.timeMillis - from.timeMillis) }
+    }
+    return RunDetails(segments.size - 1, segments.last().last().timeMillis - segments.first().first().timeMillis, splits.splits)
+}

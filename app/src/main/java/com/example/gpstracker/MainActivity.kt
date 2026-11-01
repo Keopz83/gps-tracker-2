@@ -1,6 +1,7 @@
 package com.example.gpstracker
 
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -216,14 +217,16 @@ private fun TrackerScreen() {
                         onSwipeBy = { pager.dispatchRawDelta(-it) },
                         onSwipeEnd = { step -> scope.launch { pager.animateScrollToPage(index + step) } },
                     )
-                    // REQ-9: the record of finished runs. REQ-17: picking one shows it on the map.
+                    // REQ-9: the record of finished runs. REQ-17: its map icon shows a run on the map.
                     Page.HISTORY -> RunHistoryScreen(
                         runs = history,
                         selected = shownRun,
-                        onSelect = {
+                        onShowOnMap = {
                             selectedStart = it.startMillis
                             show(Page.MAP)
                         },
+                        // REQ-22: share the GPX files of one or more runs.
+                        onShare = { runs -> scope.launch { shareRuns(context, TrackingRepository.gpxFiles(context.filesDir, runs)) } },
                         onDelete = { TrackingRepository.delete(it, context.filesDir) }, // REQ-18
                     )
                 }
@@ -302,7 +305,7 @@ private fun TrackerView(
                 }
                 // REQ-8: share the saved GPX file of the stopped run with another app.
                 if (state == SessionState.STOPPED && lastRun != null) {
-                    OutlinedButton(onClick = { shareRun(context, lastRun) }) { Text("Export GPX") }
+                    OutlinedButton(onClick = { shareRuns(context, listOf(lastRun)) }) { Text("Export GPX") }
                 }
                 return@Column
             }
@@ -376,11 +379,17 @@ private fun openBatterySaverSettings(context: Context) {
     }
 }
 
-private fun shareRun(context: Context, run: File) {
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", run)
-    val send = Intent(Intent.ACTION_SEND)
-        .setType(GPX_MIME_TYPE)
-        .putExtra(Intent.EXTRA_STREAM, uri)
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    context.startActivity(Intent.createChooser(send, "Export run"))
+/** REQ-8, REQ-22: shares saved GPX files through the Android share sheet, several at once when more are given. */
+private fun shareRuns(context: Context, runs: List<File>) {
+    if (runs.isEmpty()) return
+    val uris = runs.map { FileProvider.getUriForFile(context, "${context.packageName}.files", it) }
+    val send = if (uris.size == 1) {
+        Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris.single())
+    } else {
+        Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+    }
+    send.setType(GPX_MIME_TYPE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    // The clip carries the read permission of every file to the app picked in the share sheet.
+    send.clipData = ClipData.newRawUri(null, uris.first()).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } }
+    context.startActivity(Intent.createChooser(send, if (uris.size == 1) "Export run" else "Export ${uris.size} runs"))
 }

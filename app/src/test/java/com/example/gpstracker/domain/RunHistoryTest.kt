@@ -127,4 +127,22 @@ class RunHistoryTest {
         assertEquals(fixAt(0.0, 1_000).latitude, lat, 1e-6)
         assertEquals(fixAt(0.0, 1_000).longitude, lon, 1e-6)
     }
+
+    @Test
+    fun `REQ-9 runs are numbered in order, the oldest is 1 and the newest on top has the highest number`() {
+        assertEquals(listOf(3, 2, 1), (0 until 3).map { runNumber(it, 3) })
+    }
+
+    @Test
+    fun `REQ-18 a deleted run is removed from the saved history and the other runs are kept`() {
+        val file = File(folder.root, "history.tsv")
+        val older = RunRecord(ActivityType.JOGGING, 1_793_000_000_000, 1_800_000, 5_000.0)
+        val middle = RunRecord(ActivityType.CYCLING, 1_793_050_000_000, 3_600_000, 30_000.0, 46.0, 7.7, "Zermatt")
+        val newer = RunRecord(ActivityType.JOGGING, 1_793_100_000_000, 1_700_000, 5_100.0)
+        listOf(older, middle, newer).forEach { RunHistory(file).add(it) }
+
+        RunHistory(file).remove(middle)
+
+        assertEquals(listOf(newer, older), RunHistory(file).load())
+    }
 }

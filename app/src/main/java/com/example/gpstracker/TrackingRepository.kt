@@ -73,6 +73,18 @@ object TrackingRepository {
         }
     }
 
+    /** REQ-18: removes [record] from the history and deletes its GPX file. */
+    fun delete(record: RunRecord, filesDir: File) {
+        loadHistory(filesDir)
+        runHistory?.let {
+            it.remove(record)
+            _history.value = it.load()
+        }
+        val gpx = gpxFile(filesDir, record)
+        if (_lastRun.value == gpx) _lastRun.value = null
+        scope.launch(Dispatchers.IO) { gpx.delete() }
+    }
+
     /**
      * REQ-9: names the place where each run started, for runs that have no name yet (e.g. recorded offline or
      * before places were stored). Runs from before the start position was stored take it from their GPX file.

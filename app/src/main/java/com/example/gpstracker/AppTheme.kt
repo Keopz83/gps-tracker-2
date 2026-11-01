@@ -9,9 +9,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.colorResource
 
 /**
@@ -35,14 +44,34 @@ fun AppTheme(content: @Composable () -> Unit) {
         outlineVariant = Color.White.copy(alpha = 0.3f),
     )
     // linearGradient defaults to top-left → bottom-right.
-    val gradient = Brush.linearGradient(
-        listOf(colorResource(R.color.gradient_red), purple, colorResource(R.color.gradient_blue)),
-    )
+    val gradient = Brush.linearGradient(gradientColors())
     MaterialTheme(colorScheme = colors) {
         CompositionLocalProvider(LocalContentColor provides Color.White) {
             Box(modifier = Modifier.fillMaxSize().background(gradient).safeDrawingPadding()) {
                 content()
             }
         }
+    }
+}
+
+@Composable
+private fun gradientColors() =
+    listOf(colorResource(R.color.gradient_red), colorResource(R.color.gradient_purple), colorResource(R.color.gradient_blue))
+
+/**
+ * REQ-17: fills the element with the part of the screen gradient (REQ-10) that lies behind it, so an overlay has
+ * exactly the colour of the bar of icons next to it.
+ */
+@Composable
+fun Modifier.screenGradientBackground(): Modifier {
+    val colors = gradientColors()
+    var position by remember { mutableStateOf(Offset.Zero) }
+    var screen by remember { mutableStateOf(Offset.Zero) }
+    return onGloballyPositioned {
+        position = it.positionInRoot()
+        val root = it.findRootCoordinates().size
+        screen = Offset(root.width.toFloat(), root.height.toFloat())
+    }.drawBehind {
+        drawRect(Brush.linearGradient(colors, start = -position, end = screen - position))
     }
 }

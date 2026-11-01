@@ -14,6 +14,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,10 +23,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
@@ -53,10 +57,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -79,6 +87,7 @@ import com.example.gpstracker.domain.formatDistance
 import com.example.gpstracker.domain.formatDuration
 import com.example.gpstracker.domain.formatKmPace
 import com.example.gpstracker.domain.formatSpeed
+import com.example.gpstracker.domain.hasRoute
 import com.example.gpstracker.domain.powerSavingLimitsGps
 import com.example.gpstracker.domain.recentSplits
 import com.example.gpstracker.domain.requiredPermissions
@@ -107,6 +116,7 @@ private fun TrackerScreen() {
     val lastRun by TrackingRepository.lastRun.collectAsStateWithLifecycle()
     val history by TrackingRepository.history.collectAsStateWithLifecycle()
     val settings by SettingsRepository.settings.collectAsStateWithLifecycle()
+    // REQ-1: the activity type of the start button tapped, kept while the permissions are asked for.
     var selectedType by remember { mutableStateOf(ActivityType.JOGGING) }
     val state = stats?.state ?: SessionState.IDLE
     val active = state == SessionState.RUNNING || state == SessionState.PAUSED
@@ -166,35 +176,64 @@ private fun TrackerScreen() {
     val shownTrack by produceState<Pair<RunRecord, List<List<LocationFix>>>?>(null, shownRun?.startMillis) {
         value = shownRun?.let { it to TrackingRepository.loadTrack(context.filesDir, it) }
     }
+    // REQ-7: an active session follows the live stats, so the path keeps growing while the map is open.
+    // REQ-17: otherwise the run selected in the history, or the newest.
+    val (mapTrack, mapRunRecord) = if (shownRun == null) {
+        val live = stats?.takeIf { active }
+        live?.track.orEmpty() to live?.let(::runRecord)
+    } else {
+        shownTrack?.takeIf { it.first.startMillis == shownRun.startMillis }?.second.orEmpty() to shownRun
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // REQ-16: on the map a swipe only pans the map.
-        HorizontalPager(state = pager, userScrollEnabled = page != Page.MAP, modifier = Modifier.weight(1f)) { index ->
-            when (pageAt(index)) {
-                // REQ-13: the settings view.
-                Page.SETTINGS -> SettingsScreen(settings = settings, onChange = { SettingsRepository.update(context, it) })
-                Page.TRACKER -> TrackerView(
-                    state = state,
-                    selectedType = selectedType,
-                    lastRun = lastRun,
-                    voiceNotes = settings.voiceNotes,
-                    onVoiceNotes = { SettingsRepository.update(context, settings.copy(voiceNotes = it)) },
-                    onStart = { if (isGpsLimitedByPowerSaving(context)) showPowerSavingNote = true else requestPermissions() },
-                )
-                // REQ-7: an active session follows the live stats, so the path keeps growing while the map is open.
-                // REQ-17: otherwise the run selected in the history, or the newest.
-                Page.MAP -> if (shownRun == null) {
-                    val live = stats?.takeIf { active }
-                    RouteMapScreen(track = live?.track.orEmpty(), run = live?.let(::runRecord))
-                } else {
-                    val loaded = shownTrack?.takeIf { it.first.startMillis == shownRun.startMillis }
-                    RouteMapScreen(track = loaded?.second.orEmpty(), run = shownRun)
+        Box(modifier = Modifier.weight(1f)) {
+            // REQ-19: the map turns one-finger drags into swipes itself, so the pager leaves them to it.
+            val mapShown = hasRoute(mapTrack) && mapRunRecord != null
+            HorizontalPager(state = pager, userScrollEnabled = page != Page.MAP || !mapShown) { index ->
+                when (pageAt(index)) {
+                    // REQ-13: the settings view.
+                    Page.SETTINGS -> SettingsScreen(settings = settings, onChange = { SettingsRepository.update(context, it) })
+                    Page.TRACKER -> TrackerView(
+                        state = state,
+                        lastRun = lastRun,
+                        voiceNotes = settings.voiceNotes,
+                        onVoiceNotes = { SettingsRepository.update(context, settings.copy(voiceNotes = it)) },
+                        onStart = { type ->
+                            selectedType = type
+                            if (isGpsLimitedByPowerSaving(context)) showPowerSavingNote = true else requestPermissions()
+                        },
+                    )
+                    Page.MAP -> RouteMapScreen(
+                        track = mapTrack,
+                        run = mapRunRecord,
+                        onSwipeBy = { pager.dispatchRawDelta(-it) },
+                        onSwipeEnd = { step -> scope.launch { pager.animateScrollToPage(index + step) } },
+                    )
+                    // REQ-9: the record of finished runs. REQ-17: picking one shows it on the map.
+                    Page.HISTORY -> RunHistoryScreen(
+                        runs = history,
+                        selected = shownRun,
+                        onSelect = {
+                            selectedStart = it.startMillis
+                            show(Page.MAP)
+                        },
+                        onDelete = { TrackingRepository.delete(it, context.filesDir) }, // REQ-18
+                    )
                 }
-                // REQ-9: the record of finished runs. REQ-17: picking one shows it on the map.
-                Page.HISTORY -> RunHistoryScreen(runs = history, selected = shownRun) {
-                    selectedStart = it.startMillis
-                    show(Page.MAP)
-                }
+            }
+            // REQ-10: the app icon and name over the top left corner of every view.
+            // Its gradient backdrop cannot be seen on the other views but keeps the name readable over the map.
+            Row(
+                modifier = Modifier
+                    .padding(start = 10.dp, top = 8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .screenGradientBackground()
+                    .padding(start = 6.dp, top = 6.dp, end = 12.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AppIcon()
+                Text("Summit", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -202,18 +241,6 @@ private fun TrackerScreen() {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // REQ-1: activity type selection, locked while a session is active.
-            ActivityType.entries.forEach { type ->
-                BarIcon(
-                    icon = type.icon,
-                    label = type.label,
-                    selected = (if (active) stats?.activityType else selectedType) == type,
-                    enabled = !active,
-                ) {
-                    selectedType = type
-                    show(Page.TRACKER)
-                }
-            }
             Spacer(modifier = Modifier.weight(1f))
             BarIcon(Icons.Filled.Map, "Map", selected = page == Page.MAP) { show(Page.MAP) } // REQ-7
             BarIcon(Icons.Filled.History, "History", selected = page == Page.HISTORY) { show(Page.HISTORY) } // REQ-9
@@ -222,15 +249,14 @@ private fun TrackerScreen() {
     }
 }
 
-/** The front view: time, distance, pace and the session controls. */
+/** The front view: the start buttons, then once started time, distance, pace and the session controls. */
 @Composable
 private fun TrackerView(
     state: SessionState,
-    selectedType: ActivityType,
     lastRun: File?,
     voiceNotes: Boolean,
     onVoiceNotes: (Boolean) -> Unit,
-    onStart: () -> Unit,
+    onStart: (ActivityType) -> Unit,
 ) {
     val context = LocalContext.current
     val stats by TrackingRepository.stats.collectAsStateWithLifecycle()
@@ -250,9 +276,27 @@ private fun TrackerView(
             verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically),
         ) {
             val shown = stats
-            val type = shown?.activityType ?: selectedType
-            val elapsed = shown?.elapsedMillis ?: 0L
-            val distance = shown?.distanceMeters ?: 0.0
+            if (shown == null || state == SessionState.IDLE || state == SessionState.STOPPED) {
+                // REQ-1: only the runner above the bicycle in the centre; each starts its activity.
+                Column(verticalArrangement = Arrangement.spacedBy(32.dp)) {
+                    ActivityType.entries.forEach { type ->
+                        IconButton(
+                            onClick = { onStart(type) },
+                            modifier = Modifier.size(112.dp).background(Color.White.copy(alpha = 0.2f), CircleShape),
+                        ) {
+                            Icon(type.icon, contentDescription = "Start ${type.label}", tint = Color.White, modifier = Modifier.size(64.dp))
+                        }
+                    }
+                }
+                // REQ-8: share the saved GPX file of the stopped run with another app.
+                if (state == SessionState.STOPPED && lastRun != null) {
+                    OutlinedButton(onClick = { shareRun(context, lastRun) }) { Text("Export GPX") }
+                }
+                return@Column
+            }
+            val type = shown.activityType
+            val elapsed = shown.elapsedMillis
+            val distance = shown.distanceMeters
             Text(type.label, style = MaterialTheme.typography.titleMedium) // REQ-1
             Text(formatDuration(elapsed), style = MaterialTheme.typography.displayLarge) // REQ-4
             Text(formatDistance(distance), style = MaterialTheme.typography.headlineMedium) // REQ-3, REQ-5
@@ -260,7 +304,7 @@ private fun TrackerView(
             if (state == SessionState.PAUSED) Text("Paused")
 
             // REQ-12: pace of the last kilometre, then the three kilometres before it.
-            val splits = recentSplits(shown?.splits.orEmpty())
+            val splits = recentSplits(shown.splits)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "Last km  ${splits.firstOrNull()?.let { formatKmPace(it.millis) } ?: "--:-- /km"}",
@@ -271,36 +315,36 @@ private fun TrackerView(
 
             // REQ-1: session controls.
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                when (state) {
-                    SessionState.IDLE, SessionState.STOPPED -> Button(onClick = onStart) { Text("Start") }
-                    SessionState.RUNNING -> {
-                        Button(onClick = { TrackingService.pause(context) }) { Text("Pause") }
-                        OutlinedButton(onClick = { TrackingService.stop(context) }) { Text("Stop") }
-                    }
-                    SessionState.PAUSED -> {
-                        Button(onClick = { TrackingService.resume(context) }) { Text("Resume") }
-                        OutlinedButton(onClick = { TrackingService.stop(context) }) { Text("Stop") }
-                    }
+                if (state == SessionState.PAUSED) {
+                    Button(onClick = { TrackingService.resume(context) }) { Text("Resume") }
+                } else {
+                    Button(onClick = { TrackingService.pause(context) }) { Text("Pause") }
                 }
-            }
-
-            // REQ-8: share the saved GPX file of the stopped run with another app.
-            if (state == SessionState.STOPPED && lastRun != null) {
-                OutlinedButton(onClick = { shareRun(context, lastRun) }) { Text("Export GPX") }
+                OutlinedButton(onClick = { TrackingService.stop(context) }) { Text("Stop") }
             }
         }
     }
 }
 
+/** REQ-10: the launcher icon, its mountain layered on the gradient and cut to the safe zone of the adaptive icon. */
+@Composable
+private fun AppIcon(modifier: Modifier = Modifier, size: Dp = 32.dp) {
+    Box(modifier = modifier.size(size).clip(RoundedCornerShape(size / 4)), contentAlignment = Alignment.Center) {
+        // An adaptive icon layer is 108 units wide with the visible part in the middle 72.
+        val layer = Modifier.requiredSize(size * 108 / 72)
+        Image(painterResource(R.drawable.ic_launcher_background), contentDescription = null, modifier = layer)
+        Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, modifier = layer)
+    }
+}
+
 /** REQ-16: an icon of the bottom bar, highlighted while its view or choice is selected. */
 @Composable
-private fun BarIcon(icon: ImageVector, label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+private fun BarIcon(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
     IconButton(
         onClick = onClick,
-        enabled = enabled,
         modifier = Modifier.background(if (selected) Color.White.copy(alpha = 0.25f) else Color.Transparent, CircleShape),
     ) {
-        Icon(icon, contentDescription = label, tint = if (enabled || selected) Color.White else Color.White.copy(alpha = 0.4f))
+        Icon(icon, contentDescription = label, tint = Color.White)
     }
 }
 

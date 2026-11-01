@@ -1,7 +1,10 @@
 package com.example.gpstracker.domain
 
+import kotlin.math.abs
+import kotlin.math.sign
+
 /**
- * REQ-16: the views in swipe order, matching the icons at the bottom from left to right. Swiping right past the
+ * REQ-16: the views in swipe order: the front view, then the icons at the bottom from left to right. Swiping right past the
  * settings returns to the front view, so the views rotate.
  */
 enum class Page { TRACKER, MAP, HISTORY, SETTINGS }
@@ -33,4 +36,15 @@ fun indexOf(target: Page, current: Int): Int {
 fun mapRun(sessionActive: Boolean, selectedStart: Long?, history: List<RunRecord>): RunRecord? {
     if (sessionActive) return null
     return history.firstOrNull { it.startMillis == selectedStart } ?: history.firstOrNull()
+}
+
+/**
+ * REQ-19: how many views a one-finger drag across the map moves on when the finger is lifted: +1 to the next view
+ * (dragged left), -1 to the previous one (dragged right) or 0 to stay. A flick counts by its direction; a slow drag
+ * must pass half the view.
+ */
+fun mapSwipeStep(dragPx: Float, widthPx: Float, velocityPxPerSecond: Float, minFlingVelocity: Float): Int = when {
+    abs(velocityPxPerSecond) >= minFlingVelocity -> -sign(velocityPxPerSecond).toInt()
+    abs(dragPx) >= widthPx / 2 -> -sign(dragPx).toInt()
+    else -> 0
 }

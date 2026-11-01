@@ -23,6 +23,9 @@ fun runRecord(stats: SessionStats): RunRecord? {
     return RunRecord(stats.activityType, start.timeMillis, stats.elapsedMillis, stats.distanceMeters, start.latitude, start.longitude)
 }
 
+/** REQ-9: the order number of the run at [index] in a history of [count] runs listed newest first; the oldest run is 1. */
+fun runNumber(index: Int, count: Int): Int = count - index
+
 /** REQ-9: the run's start as a local date and time, e.g. `2026-11-01 07:41`. */
 fun formatRunDate(startMillis: Long, zone: ZoneId): String =
     DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US).format(Instant.ofEpochMilli(startMillis).atZone(zone))
@@ -61,11 +64,17 @@ class RunHistory(private val file: File) {
     }
 
     /** Replaces the stored run that has the same start and activity as [record], e.g. once its place is known. */
-    fun update(record: RunRecord) {
-        val runs = load().map { if (it.startMillis == record.startMillis && it.activityType == record.activityType) record else it }
+    fun update(record: RunRecord) = save(load().map { if (it.sameRun(record)) record else it })
+
+    /** REQ-18: removes the stored run that has the same start and activity as [record]. */
+    fun remove(record: RunRecord) = save(load().filterNot { it.sameRun(record) })
+
+    private fun save(runs: List<RunRecord>) {
         file.parentFile?.mkdirs()
         file.writeText(runs.sortedBy { it.startMillis }.joinToString("") { encode(it) + "\n" })
     }
+
+    private fun RunRecord.sameRun(other: RunRecord) = startMillis == other.startMillis && activityType == other.activityType
 
     private fun encode(record: RunRecord): String = listOf(
         record.activityType.name,

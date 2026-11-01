@@ -20,7 +20,7 @@ class NavigationTest {
     }
 
     @Test
-    fun `REQ-16 the swipe order matches the icons at the bottom from left to right`() {
+    fun `REQ-16 the swipe order is the front view, then the icons at the bottom from left to right`() {
         assertEquals(listOf(Page.TRACKER, Page.MAP, Page.HISTORY, Page.SETTINGS), Page.entries)
     }
 
@@ -30,5 +30,22 @@ class NavigationTest {
         assertEquals(START_INDEX - 1, indexOf(Page.SETTINGS, START_INDEX))
         assertEquals(START_INDEX + 4, indexOf(Page.TRACKER, START_INDEX + 3))
         assertEquals(START_INDEX + 2, indexOf(Page.HISTORY, START_INDEX + 2))
+    }
+
+    @Test
+    fun `REQ-19 a one-finger drag on the map past half the view moves to the next or previous view`() {
+        assertEquals(1, mapSwipeStep(dragPx = -600f, widthPx = 1000f, velocityPxPerSecond = 0f, minFlingVelocity = 100f))
+        assertEquals(-1, mapSwipeStep(dragPx = 600f, widthPx = 1000f, velocityPxPerSecond = 0f, minFlingVelocity = 100f))
+    }
+
+    @Test
+    fun `REQ-19 a short slow drag on the map stays on the map`() {
+        assertEquals(0, mapSwipeStep(dragPx = -300f, widthPx = 1000f, velocityPxPerSecond = -50f, minFlingVelocity = 100f))
+    }
+
+    @Test
+    fun `REQ-19 a flick on the map moves on in its direction`() {
+        assertEquals(1, mapSwipeStep(dragPx = -100f, widthPx = 1000f, velocityPxPerSecond = -800f, minFlingVelocity = 100f))
+        assertEquals(-1, mapSwipeStep(dragPx = 100f, widthPx = 1000f, velocityPxPerSecond = 800f, minFlingVelocity = 100f))
     }
 }

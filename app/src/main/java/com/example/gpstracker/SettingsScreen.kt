@@ -18,7 +18,8 @@ import com.example.gpstracker.domain.Settings
 @Composable
 fun SettingsScreen(settings: Settings, onChange: (Settings) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Settings", style = MaterialTheme.typography.titleLarge)
+        // REQ-10: the title sits below the app icon and name over the corner.
+        Text("Settings", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 44.dp))
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
             verticalAlignment = Alignment.CenterVertically,

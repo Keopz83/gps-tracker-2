@@ -90,6 +90,16 @@ class RunChartsTest {
     }
 
     @Test
+    fun `REQ-23 the climb adds up rises and falls of at least 5 m, ignoring GPS jitter`() {
+        fun profile(vararg meters: Double) = meters.mapIndexed { i, m -> ElevationPoint(i * 1000L, m) }
+        // Jitter of a few metres around 400 m counts for nothing.
+        assertEquals(Climb(0.0, 0.0), climb(profile(400.0, 403.0, 398.0, 402.0, 399.0)))
+        // Up 30 m in small steps, down 20 m, up 10 m.
+        assertEquals(Climb(40.0, 20.0), climb(profile(400.0, 403.0, 406.0, 410.0, 420.0, 430.0, 415.0, 410.0, 420.0)))
+        assertEquals(Climb(0.0, 0.0), climb(emptyList()))
+    }
+
+    @Test
     fun `REQ-23 the altitude is saved in the GPX file and read back`() {
         val track = listOf(listOf(fixAt(0.0, 0, accuracy = 0f).copy(altitudeMeters = 408.25), fixAt(100.0, 60, accuracy = 0f)))
 

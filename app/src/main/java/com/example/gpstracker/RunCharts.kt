@@ -1,13 +1,21 @@
 package com.example.gpstracker
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.NorthEast
+import androidx.compose.material.icons.filled.SouthEast
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -15,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -23,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gpstracker.domain.ActivityType
 import com.example.gpstracker.domain.ElevationPoint
+import com.example.gpstracker.domain.climb
 import com.example.gpstracker.domain.PaceBar
 import com.example.gpstracker.domain.formatTimeTick
 import com.example.gpstracker.domain.paceAxis
@@ -112,13 +122,22 @@ private fun DrawScope.bar(bar: PaceBar, top: Float, end: Long, plot: PlotArea) {
     )
 }
 
-/** REQ-23: the altitude of the run against active time, between its lowest and highest point. */
+/**
+ * REQ-23: the altitude of the run against active time, between its lowest and highest point, with the metres climbed
+ * and descended at the top right.
+ */
 @Composable
 fun ElevationChart(points: List<ElevationPoint>, modifier: Modifier = Modifier) = Column(modifier = modifier) {
-    Text("Elevation (m)", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 8.dp))
     if (points.size < 2) {
+        Text("Elevation (m)", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 8.dp))
         Text("No elevation data", style = MaterialTheme.typography.bodySmall)
         return@Column
+    }
+    val climb = climb(points)
+    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Elevation (m)", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+        ClimbLabel(Icons.Filled.NorthEast, "Climbed", climb.upMeters)
+        ClimbLabel(Icons.Filled.SouthEast, "Descended", climb.downMeters, modifier = Modifier.padding(start = 12.dp))
     }
     val measurer = rememberTextMeasurer()
     val end = points.last().activeMillis.coerceAtLeast(1)
@@ -148,6 +167,14 @@ fun ElevationChart(points: List<ElevationPoint>, modifier: Modifier = Modifier) 
         timeAxis(measurer, end, plot)
     }
 }
+
+/** REQ-23: a diagonal arrow and the metres climbed or descended, e.g. `↗ 124 m`. */
+@Composable
+private fun ClimbLabel(icon: ImageVector, description: String, meters: Double, modifier: Modifier = Modifier) =
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Icon(icon, contentDescription = description, modifier = Modifier.size(14.dp))
+        Text("${meters.roundToInt()} m", style = MaterialTheme.typography.labelMedium)
+    }
 
 /** The plot inside the canvas, leaving room for the y labels at the left and the time labels below. */
 private class PlotArea(val left: Float, val top: Float, val right: Float, val bottom: Float) {

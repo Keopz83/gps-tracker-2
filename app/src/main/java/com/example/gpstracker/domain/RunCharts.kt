@@ -80,6 +80,28 @@ fun elevationProfile(track: List<List<LocationFix>>): List<ElevationPoint> {
     }
 }
 
+/** REQ-23: the metres climbed and descended over a run. */
+data class Climb(val upMeters: Double, val downMeters: Double)
+
+private const val CLIMB_THRESHOLD_METERS = 5.0
+
+/**
+ * REQ-23: the total ascent and descent of an elevation profile. GPS altitude jitters by a few metres, so a change only
+ * counts once the altitude has moved at least 5 m away from the last counted point.
+ */
+fun climb(points: List<ElevationPoint>): Climb {
+    var up = 0.0
+    var down = 0.0
+    var reference = points.firstOrNull()?.meters ?: return Climb(0.0, 0.0)
+    points.forEach { point ->
+        val change = point.meters - reference
+        if (change >= CLIMB_THRESHOLD_METERS) up += change
+        if (change <= -CLIMB_THRESHOLD_METERS) down -= change
+        if (Math.abs(change) >= CLIMB_THRESHOLD_METERS) reference = point.meters
+    }
+    return Climb(up, down)
+}
+
 /** REQ-23: the pace chart's y axis, inverted: [fastestMillis] per km at the top, [slowestMillis] per km at the bottom. */
 data class PaceAxis(val fastestMillis: Long, val slowestMillis: Long)
 

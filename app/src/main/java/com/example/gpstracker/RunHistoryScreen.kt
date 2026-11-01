@@ -217,7 +217,7 @@ private fun RunDetailsView(run: RunRecord, modifier: Modifier = Modifier) {
     val elevation = remember(shown) { elevationProfile(shown) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val style = MaterialTheme.typography.bodyMedium
-        PaceChart(bars, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp))
+        PaceChart(bars, run.activityType, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp))
         SectionDivider()
         ElevationChart(elevation, modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp))
         SectionDivider()

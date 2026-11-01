@@ -1,7 +1,10 @@
 package com.example.gpstracker.domain
 
 /** REQ-23: one bar of the pace chart: the active time it covers (from the start, pauses left out) and its pace, if moving. */
-data class PaceBar(val startMillis: Long, val endMillis: Long, val paceMillisPerKm: Long?)
+data class PaceBar(val startMillis: Long, val endMillis: Long, val paceMillisPerKm: Long?) {
+    /** REQ-23: the bar's speed in km/h, shown instead of the pace when cycling. */
+    val speedKmh: Double? get() = paceMillisPerKm?.let { 3_600_000.0 / it }
+}
 
 /** REQ-23: one point of the elevation chart: the active time from the start (pauses left out) and the altitude. */
 data class ElevationPoint(val activeMillis: Long, val meters: Double)
@@ -91,4 +94,13 @@ fun paceAxis(bars: List<PaceBar>): PaceAxis? {
     if (paces.isEmpty()) return null
     val slowest = minOf(paces.last(), 2 * paces[paces.size / 2])
     return PaceAxis(paces.first() / MINUTE * MINUTE, (slowest + MINUTE - 1) / MINUTE * MINUTE + MINUTE)
+}
+
+/** REQ-23: the cycling chart's y axis, from 0 km/h at the bottom to [topKmh] at the top. */
+data class SpeedAxis(val topKmh: Int)
+
+/** REQ-23: the cycling chart's y axis: its top is the fastest speed rounded up to 5 km/h. Null without any speed. */
+fun speedAxis(bars: List<PaceBar>): SpeedAxis? {
+    val fastest = bars.mapNotNull { it.speedKmh }.maxOrNull() ?: return null
+    return SpeedAxis(maxOf(5, (Math.ceil(fastest / 5) * 5).toInt()))
 }

@@ -21,10 +21,12 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.gpstracker.domain.ActivityType
 import com.example.gpstracker.domain.ElevationPoint
 import com.example.gpstracker.domain.PaceBar
 import com.example.gpstracker.domain.formatTimeTick
 import com.example.gpstracker.domain.paceAxis
+import com.example.gpstracker.domain.speedAxis
 import com.example.gpstracker.domain.timeTicks
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -35,9 +37,15 @@ private val TIME_LABEL = TextStyle(color = Color.White, fontSize = 11.sp)
 private const val Y_LABEL_WIDTH = 40f
 private const val X_LABEL_HEIGHT = 22f
 
-/** REQ-23: the pace (min/km) of each stretch of the run, as bars against active time. */
+/** REQ-23: the pace (min/km), or speed (km/h) when cycling, of each stretch of the run, as bars against active time. */
 @Composable
-fun PaceChart(bars: List<PaceBar>, modifier: Modifier = Modifier) = Column(modifier = modifier) {
+fun PaceChart(bars: List<PaceBar>, activityType: ActivityType, modifier: Modifier = Modifier) = when (activityType) {
+    ActivityType.JOGGING -> JoggingPaceChart(bars, modifier)
+    ActivityType.CYCLING -> SpeedChart(bars, modifier)
+}
+
+@Composable
+private fun JoggingPaceChart(bars: List<PaceBar>, modifier: Modifier) = Column(modifier = modifier) {
     Text("Pace (min/km)", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 8.dp))
     val axis = paceAxis(bars)
     if (axis == null) {
@@ -59,16 +67,49 @@ fun PaceChart(bars: List<PaceBar>, modifier: Modifier = Modifier) = Column(modif
         bars.forEach { bar ->
             val pace = bar.paceMillisPerKm ?: return@forEach
             val top = y(pace.coerceIn(axis.fastestMillis, axis.slowestMillis))
-            val left = plot.left + plot.width * bar.startMillis / end
-            val width = plot.width * (bar.endMillis - bar.startMillis) / end
-            drawRect(
-                Color.White.copy(alpha = 0.85f),
-                topLeft = Offset(left + 1f, top),
-                size = Size((width - 2f).coerceAtLeast(1f), plot.bottom - top),
-            )
+            bar(bar, top, end, plot)
         }
         timeAxis(measurer, end, plot)
     }
+}
+
+/** REQ-23: the speed of each stretch of a cycling run, from 0 km/h at the bottom, so faster stretches get taller bars. */
+@Composable
+private fun SpeedChart(bars: List<PaceBar>, modifier: Modifier) = Column(modifier = modifier) {
+    Text("Speed (km/h)", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 8.dp))
+    val axis = speedAxis(bars)
+    if (axis == null) {
+        Text("No speed data", style = MaterialTheme.typography.bodySmall)
+        return@Column
+    }
+    val measurer = rememberTextMeasurer()
+    val end = bars.last().endMillis
+    Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+        val plot = plotArea()
+        // A grid line every 5 km/h (every 10 above 40 km/h).
+        fun y(kmh: Double) = plot.bottom - (plot.height * kmh / axis.topKmh).toFloat()
+        val step = if (axis.topKmh > 40) 10 else 5
+        for (kmh in 0..axis.topKmh step step) {
+            drawLine(GRID, Offset(plot.left, y(kmh.toDouble())), Offset(plot.right, y(kmh.toDouble())))
+            yLabel(measurer, "$kmh", y(kmh.toDouble()))
+        }
+        bars.forEach { bar ->
+            val speed = bar.speedKmh ?: return@forEach
+            bar(bar, y(speed.coerceAtMost(axis.topKmh.toDouble())), end, plot)
+        }
+        timeAxis(measurer, end, plot)
+    }
+}
+
+/** One bar of the pace or speed chart, from [top] down to the time axis. */
+private fun DrawScope.bar(bar: PaceBar, top: Float, end: Long, plot: PlotArea) {
+    val left = plot.left + plot.width * bar.startMillis / end
+    val width = plot.width * (bar.endMillis - bar.startMillis) / end
+    drawRect(
+        Color.White.copy(alpha = 0.85f),
+        topLeft = Offset(left + 1f, top),
+        size = Size((width - 2f).coerceAtLeast(1f), plot.bottom - top),
+    )
 }
 
 /** REQ-23: the altitude of the run against active time, between its lowest and highest point. */

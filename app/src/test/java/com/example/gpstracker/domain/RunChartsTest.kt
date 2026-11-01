@@ -67,6 +67,16 @@ class RunChartsTest {
     }
 
     @Test
+    fun `REQ-23 when cycling the bars show speed in km per hour, from 0 up to the fastest rounded up to 5 km per hour`() {
+        fun bar(pace: Long?) = PaceBar(0, 60_000, pace)
+        assertEquals(24.0, bar(150_000).speedKmh!!, 1e-9)
+        assertEquals(SpeedAxis(25), speedAxis(listOf(bar(150_000), bar(200_000), bar(null))))
+        assertEquals(SpeedAxis(30), speedAxis(listOf(bar(140_000))))
+        assertEquals(SpeedAxis(5), speedAxis(listOf(bar(3_000_000))))
+        assertNull(speedAxis(listOf(bar(null))))
+    }
+
+    @Test
     fun `REQ-23 the elevation profile follows active time and skips positions without altitude`() {
         val track = listOf(
             listOf(fixAt(0.0, 0).copy(altitudeMeters = 400.0), fixAt(100.0, 60).copy(altitudeMeters = 410.0)),

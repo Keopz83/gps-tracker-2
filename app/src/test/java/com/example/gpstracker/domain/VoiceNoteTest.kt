@@ -8,7 +8,7 @@ class VoiceNoteTest {
     fun `REQ-14 the note gives total distance, total time and last km pace in minutes and seconds per km`() {
         assertEquals(
             "3 kilometres. Time 16 minutes 5 seconds. Last kilometre 5 minutes 12 seconds per kilometre.",
-            kmVoiceNote(km = 3, elapsedMillis = (16 * 60 + 5) * 1000L, lastKmMillis = 312_000),
+            kmVoiceNote(ActivityType.JOGGING, km = 3, elapsedMillis = (16 * 60 + 5) * 1000L, lastKmMillis = 312_000),
         )
     }
 
@@ -16,7 +16,7 @@ class VoiceNoteTest {
     fun `REQ-14 singular units and hours are spoken correctly`() {
         assertEquals(
             "1 kilometre. Time 1 hour 1 minute 1 second. Last kilometre 6 minutes 0 seconds per kilometre.",
-            kmVoiceNote(km = 1, elapsedMillis = 3_661_000, lastKmMillis = 360_000),
+            kmVoiceNote(ActivityType.JOGGING, km = 1, elapsedMillis = 3_661_000, lastKmMillis = 360_000),
         )
     }
 
@@ -31,13 +31,13 @@ class VoiceNoteTest {
     fun `REQ-20 the minute note gives the time, total distance and average pace`() {
         assertEquals(
             "5 minutes. Distance 0.84 kilometres. Average pace 5 minutes 57 seconds per kilometre.",
-            minuteVoiceNote(minutes = 5, distanceMeters = 840.0),
+            minuteVoiceNote(ActivityType.JOGGING, minutes = 5, distanceMeters = 840.0),
         )
     }
 
     @Test
     fun `REQ-20 the minute note speaks hours and leaves the pace out before any distance`() {
-        assertEquals("1 hour 1 minute. Distance 0.00 kilometres.", minuteVoiceNote(minutes = 61, distanceMeters = 0.0))
+        assertEquals("1 hour 1 minute. Distance 0.00 kilometres.", minuteVoiceNote(ActivityType.JOGGING, minutes = 61, distanceMeters = 0.0))
     }
 
     @Test
@@ -57,7 +57,7 @@ class VoiceNoteTest {
     fun `REQ-25 the screen-on report gives the time, total distance and average pace`() {
         assertEquals(
             "Time 16 minutes 5 seconds. Distance 3.02 kilometres. Average pace 5 minutes 20 seconds per kilometre.",
-            screenOnVoiceNote(elapsedMillis = (16 * 60 + 5) * 1000L, distanceMeters = 3015.6),
+            screenOnVoiceNote(ActivityType.JOGGING, elapsedMillis = (16 * 60 + 5) * 1000L, distanceMeters = 3015.6),
         )
     }
 
@@ -65,7 +65,31 @@ class VoiceNoteTest {
     fun `REQ-25 the screen-on report speaks hours and leaves the pace out before any distance`() {
         assertEquals(
             "Time 1 hour 0 minutes 1 second. Distance 0.00 kilometres.",
-            screenOnVoiceNote(elapsedMillis = 3_601_000, distanceMeters = 0.0),
+            screenOnVoiceNote(ActivityType.JOGGING, elapsedMillis = 3_601_000, distanceMeters = 0.0),
+        )
+    }
+
+    @Test
+    fun `REQ-14 when cycling the note gives the last km speed in km per hour`() {
+        assertEquals(
+            "3 kilometres. Time 9 minutes 30 seconds. Last kilometre 24.0 kilometres per hour.",
+            kmVoiceNote(ActivityType.CYCLING, km = 3, elapsedMillis = 570_000, lastKmMillis = 150_000),
+        )
+    }
+
+    @Test
+    fun `REQ-20 when cycling the minute note gives the average speed in km per hour`() {
+        assertEquals(
+            "10 minutes. Distance 3.20 kilometres. Average speed 19.2 kilometres per hour.",
+            minuteVoiceNote(ActivityType.CYCLING, minutes = 10, distanceMeters = 3200.0),
+        )
+    }
+
+    @Test
+    fun `REQ-25 when cycling the screen-on report gives the average speed in km per hour`() {
+        assertEquals(
+            "Time 16 minutes 5 seconds. Distance 4.02 kilometres. Average speed 15.0 kilometres per hour.",
+            screenOnVoiceNote(ActivityType.CYCLING, elapsedMillis = (16 * 60 + 5) * 1000L, distanceMeters = 4020.0),
         )
     }
 }

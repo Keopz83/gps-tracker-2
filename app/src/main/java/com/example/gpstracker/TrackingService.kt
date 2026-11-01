@@ -315,7 +315,7 @@ class TrackingService : Service() {
     private fun announceKm(kmBefore: Int) {
         val stats = TrackingRepository.stats.value ?: return
         if (stats.splits.size <= kmBefore || !SettingsRepository.settings.value.voiceNotes) return
-        voiceNotes.speak(kmVoiceNote(stats.splits.size, stats.elapsedMillis, stats.splits.last()))
+        voiceNotes.speak(kmVoiceNote(stats.activityType, stats.splits.size, stats.elapsedMillis, stats.splits.last()))
     }
 
     /**
@@ -327,15 +327,15 @@ class TrackingService : Service() {
         val minutes = elapsedMinutes(stats.elapsedMillis)
         if (minutes <= minutesReached) return
         minutesReached = minutes
-        if (SettingsRepository.settings.value.minuteNotes) voiceNotes.speak(minuteVoiceNote(minutes, stats.distanceMeters))
+        if (SettingsRepository.settings.value.minuteNotes) voiceNotes.speak(minuteVoiceNote(stats.activityType, minutes, stats.distanceMeters))
     }
 
-    /** REQ-25: speaks the time, distance and average pace of the running or paused session. */
+    /** REQ-25: speaks the time, distance and average pace (speed when cycling) of the running or paused session. */
     private fun announceReport() {
         val session = TrackingRepository.session ?: return
         if (session.state != SessionState.RUNNING && session.state != SessionState.PAUSED) return
         val stats = session.stats()
-        voiceNotes.speak(screenOnVoiceNote(stats.elapsedMillis, stats.distanceMeters))
+        voiceNotes.speak(screenOnVoiceNote(stats.activityType, stats.elapsedMillis, stats.distanceMeters))
     }
 
     private fun createChannel() {

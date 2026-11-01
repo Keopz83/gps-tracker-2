@@ -1,9 +1,12 @@
 package com.example.gpstracker
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -22,6 +26,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,11 +35,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gpstracker.domain.ActivityType
 import com.example.gpstracker.domain.GPX_MIME_TYPE
+import com.example.gpstracker.domain.LOCATION_POWER_SAVE_NO_CHANGE
 import com.example.gpstracker.domain.SessionState
 import com.example.gpstracker.domain.canStartTracking
 import com.example.gpstracker.domain.formatDistance
@@ -42,6 +49,7 @@ import com.example.gpstracker.domain.formatDuration
 import com.example.gpstracker.domain.formatKmPace
 import com.example.gpstracker.domain.formatSpeed
 import com.example.gpstracker.domain.hasRoute
+import com.example.gpstracker.domain.powerSavingLimitsGps
 import com.example.gpstracker.domain.recentSplits
 import com.example.gpstracker.domain.requiredPermissions
 import java.io.File
@@ -73,6 +81,7 @@ private fun TrackerScreen() {
     var showMap by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showPowerSavingNote by remember { mutableStateOf(false) }
 
     // REQ-6: ask for permissions, then start the foreground service.
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -83,6 +92,35 @@ private fun TrackerScreen() {
         } else {
             Toast.makeText(context, "Precise location permission is required to track", Toast.LENGTH_LONG).show()
         }
+    }
+
+    val requestPermissions = { permissionLauncher.launch(requiredPermissions(Build.VERSION.SDK_INT).toTypedArray()) }
+
+    // REQ-15: power saving can switch the GPS off with the screen, so the user is asked to turn it off first.
+    if (showPowerSavingNote) {
+        AlertDialog(
+            onDismissRequest = { showPowerSavingNote = false },
+            containerColor = colorResource(R.color.gradient_purple),
+            title = { Text("Turn off power saving") },
+            text = {
+                Text(
+                    "Power saving is on. It can switch the GPS off while the screen is off, " +
+                        "so parts of your route would not be recorded. Turn power saving off before you start.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPowerSavingNote = false
+                    openBatterySaverSettings(context)
+                }) { Text("Open settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showPowerSavingNote = false
+                    requestPermissions()
+                }) { Text("Start anyway") }
+            },
+        )
     }
 
     // REQ-7: the map follows the live stats, so the path keeps growing while it is open.
@@ -148,7 +186,7 @@ private fun TrackerScreen() {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             when (state) {
                 SessionState.IDLE, SessionState.STOPPED -> Button(
-                    onClick = { permissionLauncher.launch(requiredPermissions(Build.VERSION.SDK_INT).toTypedArray()) },
+                    onClick = { if (isGpsLimitedByPowerSaving(context)) showPowerSavingNote = true else requestPermissions() },
                 ) { Text("Start") }
                 SessionState.RUNNING -> {
                     Button(onClick = { TrackingService.pause(context) }) { Text("Pause") }
@@ -175,6 +213,22 @@ private fun TrackerScreen() {
 
         // REQ-13
         OutlinedButton(onClick = { showSettings = true }) { Text("Settings") }
+    }
+}
+
+/** REQ-15: whether the phone's power saving currently limits the GPS while the screen is off. */
+private fun isGpsLimitedByPowerSaving(context: Context): Boolean {
+    val power = context.getSystemService(PowerManager::class.java)
+    val locationMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) power.locationPowerSaveMode else LOCATION_POWER_SAVE_NO_CHANGE
+    return powerSavingLimitsGps(Build.VERSION.SDK_INT, power.isPowerSaveMode, locationMode)
+}
+
+/** REQ-15: opens the power saving settings, or the settings home where the phone has no such screen. */
+private fun openBatterySaverSettings(context: Context) {
+    try {
+        context.startActivity(Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS))
+    } catch (e: ActivityNotFoundException) {
+        context.startActivity(Intent(Settings.ACTION_SETTINGS))
     }
 }
 

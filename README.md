@@ -20,6 +20,7 @@ Summit is an Android app that records your route, distance, time and speed while
 | REQ-12 | **Kilometre pace** — The front view shows the pace of the last completed kilometre and of the three kilometres before it (newest first, in `min:ss /km`), or `--:-- /km` before the first kilometre. A kilometre's time is measured between recorded positions (the moment it is completed is interpolated between the positions either side of it), so time and distance spent paused are not counted. |
 | REQ-13 | **Settings** — A *Settings* button opens a settings view. Settings are kept across app restarts. |
 | REQ-14 | **Kilometre voice note** — An option in the settings, off by default, speaks a note each time a kilometre is completed with the total distance, the total active time and the last kilometre's pace in minutes and seconds per kilometre (e.g. *"3 kilometres. Time 16 minutes 5 seconds. Last kilometre 5 minutes 12 seconds per kilometre."*). Other audio such as music is lowered while it speaks. With the option on and the screen off, positions are batched for at most 5 s instead of 30 s (REQ-11) so the note comes on time. |
+| REQ-15 | **Power saving warning** — Power saving can switch the GPS off while the screen is off (e.g. Samsung), which leaves gaps in the track that are drawn and counted as straight lines. When *Start* is pressed while power saving is on and limits location (or, before Android 9, whenever it is on), a note asks the user to turn power saving off, with *Open settings* (the power saving settings) or *Start anyway*. |
 
 ## Project layout
 

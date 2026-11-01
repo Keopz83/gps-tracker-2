@@ -1,0 +1,6 @@
+<resources>
+    <!-- REQ-10: brand gradient, top-left to bottom-right -->
+    <color name="gradient_red">#FFE53935</color>
+    <color name="gradient_purple">#FF8E24AA</color>
+    <color name="gradient_blue">#FF1E88E5</color>
+</resources>

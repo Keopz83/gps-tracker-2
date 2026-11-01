@@ -9,6 +9,8 @@ data class SessionStats(
     val elapsedMillis: Long,
     val distanceMeters: Double,
     val track: List<List<LocationFix>>,
+    /** REQ-12: milliseconds per completed kilometre, first kilometre first. */
+    val splits: List<Long> = emptyList(),
 )
 
 /**
@@ -28,6 +30,7 @@ class TrackingSession(
     private var accumulatedMillis = 0L
     private var runningSince = 0L
     private var pausedSince = 0L
+    private val kmSplits = KmSplits()
 
     // REQ-1
     fun start() {
@@ -57,7 +60,9 @@ class TrackingSession(
     fun onLocation(fix: LocationFix): Boolean {
         if (state != SessionState.RUNNING) return false
         val segment = segments.last()
-        if (!filter.accept(segment.lastOrNull(), fix, activityType)) return false
+        val previous = segment.lastOrNull()
+        if (!filter.accept(previous, fix, activityType)) return false
+        if (previous != null) kmSplits.add(haversineMeters(previous, fix), fix.timeMillis - previous.timeMillis)
         segment += fix
         return true
     }
@@ -70,6 +75,10 @@ class TrackingSession(
     val pausedMillis: Long
         get() = if (state == SessionState.PAUSED) clock() - pausedSince else 0L
 
+    /** REQ-14: the number of completed kilometres. */
+    val completedKm: Int
+        get() = kmSplits.count
+
     /** REQ-3: distance summed within each segment. */
     val distanceMeters: Double
         get() = segments.sumOf { segment -> segment.zipWithNext(::haversineMeters).sum() }
@@ -80,6 +89,7 @@ class TrackingSession(
         elapsedMillis = elapsedMillis,
         distanceMeters = distanceMeters,
         track = segments.map { it.toList() },
+        splits = kmSplits.splits,
     )
 
     private fun beginSegment() {

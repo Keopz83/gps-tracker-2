@@ -32,6 +32,7 @@ import com.example.gpstracker.domain.SessionState
 import com.example.gpstracker.domain.TrackingSession
 import com.example.gpstracker.domain.gpsRequest
 import com.example.gpstracker.domain.gpxFileName
+import com.example.gpstracker.domain.kmVoiceNote
 import com.example.gpstracker.domain.notificationContent
 import com.example.gpstracker.domain.runRecord
 import com.example.gpstracker.domain.toGpx
@@ -43,6 +44,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -59,6 +61,7 @@ class TrackingService : Service() {
     private var screenOn = true
     private var activeGpsRequest: GpsRequest? = null
     private var shownNotification: NotificationContent? = null
+    private lateinit var voiceNotes: VoiceNotes
 
     private val listener = object : LocationListener {
         override fun onLocationChanged(location: Location) = onLocations(listOf(location))
@@ -87,6 +90,10 @@ class TrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(LocationManager::class.java)
+        voiceNotes = VoiceNotes(this)
+        SettingsRepository.load(this)
+        // REQ-14: turning voice notes on or off during a run changes how long positions may be batched.
+        scope.launch { SettingsRepository.settings.drop(1).collect { updateGps() } }
         screenOn = getSystemService(PowerManager::class.java).isInteractive
         ContextCompat.registerReceiver(
             this,
@@ -146,7 +153,7 @@ class TrackingService : Service() {
     @SuppressLint("MissingPermission") // MainActivity only starts the service after location permission is granted.
     private fun updateGps() {
         val session = TrackingRepository.session
-        val request = session?.let { gpsRequest(it.state, it.pausedMillis, screenOn) }
+        val request = session?.let { gpsRequest(it.state, it.pausedMillis, screenOn, SettingsRepository.settings.value.voiceNotes) }
         if (request == activeGpsRequest) return
         activeGpsRequest = request
         when {
@@ -221,6 +228,7 @@ class TrackingService : Service() {
 
     private fun onLocations(locations: List<Location>) {
         val session = TrackingRepository.session ?: return
+        val kmBefore = session.completedKm
         val recorded = locations.count { location ->
             session.onLocation(
                 LocationFix(
@@ -234,7 +242,15 @@ class TrackingService : Service() {
         if (recorded > 0) {
             TrackingRepository.publish()
             updateNotification()
+            announceKm(kmBefore)
         }
+    }
+
+    /** REQ-14: speaks the latest kilometre when one was completed since [kmBefore] and voice notes are on. */
+    private fun announceKm(kmBefore: Int) {
+        val stats = TrackingRepository.stats.value ?: return
+        if (stats.splits.size <= kmBefore || !SettingsRepository.settings.value.voiceNotes) return
+        voiceNotes.speak(kmVoiceNote(stats.splits.size, stats.elapsedMillis, stats.splits.last()))
     }
 
     private fun createChannel() {
@@ -273,6 +289,7 @@ class TrackingService : Service() {
     override fun onDestroy() {
         locationManager.removeUpdates(listener)
         unregisterReceiver(screenReceiver)
+        voiceNotes.shutdown()
         scope.cancel()
         super.onDestroy()
     }

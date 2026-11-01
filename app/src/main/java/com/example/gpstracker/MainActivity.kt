@@ -39,8 +39,10 @@ import com.example.gpstracker.domain.SessionState
 import com.example.gpstracker.domain.canStartTracking
 import com.example.gpstracker.domain.formatDistance
 import com.example.gpstracker.domain.formatDuration
+import com.example.gpstracker.domain.formatKmPace
 import com.example.gpstracker.domain.formatSpeed
 import com.example.gpstracker.domain.hasRoute
+import com.example.gpstracker.domain.recentSplits
 import com.example.gpstracker.domain.requiredPermissions
 import java.io.File
 
@@ -48,6 +50,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         TrackingRepository.loadHistory(filesDir) // REQ-9
+        SettingsRepository.load(this) // REQ-13
         enableEdgeToEdge() // REQ-10: the gradient also fills the system bars.
         setContent {
             AppTheme {
@@ -63,11 +66,13 @@ private fun TrackerScreen() {
     val stats by TrackingRepository.stats.collectAsStateWithLifecycle()
     val lastRun by TrackingRepository.lastRun.collectAsStateWithLifecycle()
     val history by TrackingRepository.history.collectAsStateWithLifecycle()
+    val settings by SettingsRepository.settings.collectAsStateWithLifecycle()
     var selectedType by remember { mutableStateOf(ActivityType.JOGGING) }
     val state = stats?.state ?: SessionState.IDLE
     val active = state == SessionState.RUNNING || state == SessionState.PAUSED
     var showMap by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
 
     // REQ-6: ask for permissions, then start the foreground service.
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -90,6 +95,16 @@ private fun TrackerScreen() {
     // REQ-9: the record of finished runs.
     if (showHistory) {
         RunHistoryScreen(runs = history, onClose = { showHistory = false })
+        return
+    }
+
+    // REQ-13: the settings view.
+    if (showSettings) {
+        SettingsScreen(
+            settings = settings,
+            onChange = { SettingsRepository.update(context, it) },
+            onClose = { showSettings = false },
+        )
         return
     }
 
@@ -119,6 +134,16 @@ private fun TrackerScreen() {
         Text(formatSpeed(type, distance, elapsed), style = MaterialTheme.typography.headlineMedium) // REQ-5
         if (state == SessionState.PAUSED) Text("Paused")
 
+        // REQ-12: pace of the last kilometre, then the three kilometres before it.
+        val splits = recentSplits(shown?.splits.orEmpty())
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "Last km  ${splits.firstOrNull()?.let { formatKmPace(it.millis) } ?: "--:-- /km"}",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            splits.drop(1).forEach { Text("km ${it.km}  ${formatKmPace(it.millis)}") }
+        }
+
         // REQ-1: session controls.
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             when (state) {
@@ -147,6 +172,9 @@ private fun TrackerScreen() {
 
         // REQ-9: list of finished runs.
         OutlinedButton(onClick = { showHistory = true }) { Text("History") }
+
+        // REQ-13
+        OutlinedButton(onClick = { showSettings = true }) { Text("Settings") }
     }
 }
 

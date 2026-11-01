@@ -12,6 +12,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- REQ-14: lets the app find the text-to-speech engine for the voice notes -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <uses-feature android:name="android.hardware.location.gps" android:required="true" />
 
     <application

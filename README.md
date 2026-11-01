@@ -14,6 +14,7 @@ An Android app that records your route, distance, time and speed while jogging o
 | REQ-6 | **Background tracking & permissions** — Tracking keeps running with the screen off through a foreground service with a persistent notification. Before starting, the app requests precise location permission (plus notification permission on Android 13+); tracking only starts when location permission is granted. |
 | REQ-7 | **Route map** — A *Map* button, enabled once a position has been recorded, opens a map (OpenStreetMap) showing the path taken so far, with the latest position marked. The path keeps growing while the map is open, and the gap between pausing and resuming is not drawn. |
 | REQ-8 | **Run export (GPX)** — When a session is stopped, the run is saved as a GPX 1.1 file (one `<trkseg>` per segment between pauses, UTC timestamps, activity type `running`/`cycling`) so it can be imported into other sports apps such as Strava, Garmin Connect or Komoot. Runs without recorded positions are not saved. An *Export GPX* button shares the saved file through the Android share sheet. |
+| REQ-9 | **Run history** — Every stopped run with recorded positions is added to a history that survives app restarts. A *History* button opens the list of runs, newest first, showing for each run its start date and time (local, `yyyy-MM-dd HH:mm`), activity type, distance (REQ-5) and active duration (REQ-4). |
 
 ## Project layout
 

@@ -25,6 +25,7 @@ import com.example.gpstracker.domain.TrackingSession
 import com.example.gpstracker.domain.formatDistance
 import com.example.gpstracker.domain.formatDuration
 import com.example.gpstracker.domain.gpxFileName
+import com.example.gpstracker.domain.runRecord
 import com.example.gpstracker.domain.toGpx
 import java.io.File
 import java.time.ZoneId
@@ -99,6 +100,7 @@ class TrackingService : Service() {
         TrackingRepository.session?.takeIf { it.state == SessionState.RUNNING || it.state == SessionState.PAUSED }?.let {
             it.stop()
             TrackingRepository.saved(saveRun(it))
+            runRecord(it.stats())?.let { record -> TrackingRepository.recorded(record, filesDir) } // REQ-9
         }
         TrackingRepository.publish()
         locationManager.removeUpdates(listener)

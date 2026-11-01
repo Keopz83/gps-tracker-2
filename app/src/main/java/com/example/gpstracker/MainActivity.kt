@@ -47,6 +47,7 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        TrackingRepository.loadHistory(filesDir) // REQ-9
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -62,10 +63,12 @@ private fun TrackerScreen() {
     val context = LocalContext.current
     val stats by TrackingRepository.stats.collectAsStateWithLifecycle()
     val lastRun by TrackingRepository.lastRun.collectAsStateWithLifecycle()
+    val history by TrackingRepository.history.collectAsStateWithLifecycle()
     var selectedType by remember { mutableStateOf(ActivityType.JOGGING) }
     val state = stats?.state ?: SessionState.IDLE
     val active = state == SessionState.RUNNING || state == SessionState.PAUSED
     var showMap by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
 
     // REQ-6: ask for permissions, then start the foreground service.
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -82,6 +85,12 @@ private fun TrackerScreen() {
     val track = stats?.track.orEmpty()
     if (showMap) {
         RouteMapScreen(track = track, onClose = { showMap = false })
+        return
+    }
+
+    // REQ-9: the record of finished runs.
+    if (showHistory) {
+        RunHistoryScreen(runs = history, onClose = { showHistory = false })
         return
     }
 
@@ -136,6 +145,9 @@ private fun TrackerScreen() {
         if (state == SessionState.STOPPED && run != null) {
             OutlinedButton(onClick = { shareRun(context, run) }) { Text("Export GPX") }
         }
+
+        // REQ-9: list of finished runs.
+        OutlinedButton(onClick = { showHistory = true }) { Text("History") }
     }
 }
 

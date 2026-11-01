@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -216,8 +217,10 @@ private fun RunDetailsView(run: RunRecord, modifier: Modifier = Modifier) {
     val elevation = remember(shown) { elevationProfile(shown) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val style = MaterialTheme.typography.bodyMedium
-        PaceChart(bars, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
-        ElevationChart(elevation, modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp))
+        PaceChart(bars, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp))
+        SectionDivider()
+        ElevationChart(elevation, modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp))
+        SectionDivider()
         details.splits.forEachIndexed { i, millis ->
             val pace = when (run.activityType) {
                 ActivityType.JOGGING -> formatKmPace(millis)
@@ -227,6 +230,14 @@ private fun RunDetailsView(run: RunRecord, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/** REQ-23: the see-through line between the charts and the kilometre list. */
+@Composable
+private fun SectionDivider() = HorizontalDivider(
+    modifier = Modifier.padding(bottom = 6.dp),
+    thickness = 1.dp,
+    color = Color.White.copy(alpha = 0.25f),
+)
 
 /**
  * REQ-9: one run on a single line, from left to right: order number (a check mark while selected, REQ-22), activity

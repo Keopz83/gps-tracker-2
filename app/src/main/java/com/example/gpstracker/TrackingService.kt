@@ -30,9 +30,11 @@ import com.example.gpstracker.domain.NotificationContent
 import com.example.gpstracker.domain.PAUSE_GPS_GRACE_MILLIS
 import com.example.gpstracker.domain.SessionState
 import com.example.gpstracker.domain.TrackingSession
+import com.example.gpstracker.domain.elapsedMinutes
 import com.example.gpstracker.domain.gpsRequest
 import com.example.gpstracker.domain.gpxFileName
 import com.example.gpstracker.domain.kmVoiceNote
+import com.example.gpstracker.domain.minuteVoiceNote
 import com.example.gpstracker.domain.notificationContent
 import com.example.gpstracker.domain.runRecord
 import com.example.gpstracker.domain.toGpx
@@ -63,6 +65,9 @@ class TrackingService : Service() {
     private var shownNotification: NotificationContent? = null
     private lateinit var voiceNotes: VoiceNotes
 
+    /** REQ-20: the whole minutes of active time already reached, so each minute is announced once. */
+    private var minutesReached = 0L
+
     private val listener = object : LocationListener {
         override fun onLocationChanged(location: Location) = onLocations(listOf(location))
 
@@ -92,7 +97,7 @@ class TrackingService : Service() {
         locationManager = getSystemService(LocationManager::class.java)
         voiceNotes = VoiceNotes(this)
         SettingsRepository.load(this)
-        // REQ-14: turning voice notes on or off during a run changes how long positions may be batched.
+        // REQ-14, REQ-20: turning voice notes on or off during a run changes how long positions may be batched.
         scope.launch { SettingsRepository.settings.drop(1).collect { updateGps() } }
         screenOn = getSystemService(PowerManager::class.java).isInteractive
         ContextCompat.registerReceiver(
@@ -138,6 +143,7 @@ class TrackingService : Service() {
         val session = TrackingSession(activityType, clock = SystemClock::elapsedRealtime)
         session.start()
         TrackingRepository.begin(session)
+        minutesReached = 0
 
         ServiceCompat.startForeground(
             this,
@@ -153,7 +159,7 @@ class TrackingService : Service() {
     @SuppressLint("MissingPermission") // MainActivity only starts the service after location permission is granted.
     private fun updateGps() {
         val session = TrackingRepository.session
-        val request = session?.let { gpsRequest(it.state, it.pausedMillis, screenOn, SettingsRepository.settings.value.voiceNotes) }
+        val request = session?.let { gpsRequest(it.state, it.pausedMillis, screenOn, SettingsRepository.settings.value.anyVoiceNotes) }
         if (request == activeGpsRequest) return
         activeGpsRequest = request
         when {
@@ -247,6 +253,7 @@ class TrackingService : Service() {
             updateNotification()
             announceKm(kmBefore)
         }
+        announceMinute()
     }
 
     /** REQ-14: speaks the latest kilometre when one was completed since [kmBefore] and voice notes are on. */
@@ -254,6 +261,18 @@ class TrackingService : Service() {
         val stats = TrackingRepository.stats.value ?: return
         if (stats.splits.size <= kmBefore || !SettingsRepository.settings.value.voiceNotes) return
         voiceNotes.speak(kmVoiceNote(stats.splits.size, stats.elapsedMillis, stats.splits.last()))
+    }
+
+    /**
+     * REQ-20: speaks the minute note when a new whole minute of active time was reached and minute notes are on.
+     * Checked with every delivery of positions, so it comes at most one batch late (REQ-14).
+     */
+    private fun announceMinute() {
+        val stats = TrackingRepository.session?.takeIf { it.state == SessionState.RUNNING }?.stats() ?: return
+        val minutes = elapsedMinutes(stats.elapsedMillis)
+        if (minutes <= minutesReached) return
+        minutesReached = minutes
+        if (SettingsRepository.settings.value.minuteNotes) voiceNotes.speak(minuteVoiceNote(minutes, stats.distanceMeters))
     }
 
     private fun createChannel() {

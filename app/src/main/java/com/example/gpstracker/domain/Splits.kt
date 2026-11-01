@@ -1,5 +1,7 @@
 package com.example.gpstracker.domain
 
+import java.util.Locale
+
 private const val KM = 1_000.0
 
 /**
@@ -58,6 +60,23 @@ fun kmVoiceNote(km: Int, elapsedMillis: Long, lastKmMillis: Long): String {
         spokenDuration((totalSeconds % 3600) / 60, totalSeconds % 60),
     ).joinToString(" ")
     return "$distance. Time $time. Last kilometre $pace per kilometre."
+}
+
+/** REQ-20: the whole minutes of active time in [elapsedMillis], each of which is announced once it is reached. */
+fun elapsedMinutes(elapsedMillis: Long): Long = elapsedMillis / 60_000
+
+/**
+ * REQ-20: the spoken note when [minutes] of active time are reached: the time, the total distance in kilometres
+ * and the average pace so far in minutes and seconds per kilometre (left out before any distance is covered).
+ */
+fun minuteVoiceNote(minutes: Long, distanceMeters: Double): String {
+    val time = listOfNotNull((minutes / 60).takeIf { it > 0 }?.let { unit(it, "hour") }, unit(minutes % 60, "minute"))
+        .joinToString(" ")
+    val km = String.format(Locale.US, "%.2f", distanceMeters / 1000)
+    val note = "$time. Distance $km kilometres."
+    if (distanceMeters < 1.0) return note
+    val paceSeconds = Math.round(minutes * 60 * 1000.0 / distanceMeters)
+    return "$note Average pace ${spokenDuration(paceSeconds / 60, paceSeconds % 60)} per kilometre."
 }
 
 private fun spokenDuration(minutes: Long, seconds: Long) = "${unit(minutes, "minute")} ${unit(seconds, "second")}"

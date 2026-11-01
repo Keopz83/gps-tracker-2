@@ -36,6 +36,7 @@ import com.example.gpstracker.domain.canStartTracking
 import com.example.gpstracker.domain.formatDistance
 import com.example.gpstracker.domain.formatDuration
 import com.example.gpstracker.domain.formatSpeed
+import com.example.gpstracker.domain.hasRoute
 import com.example.gpstracker.domain.requiredPermissions
 
 class MainActivity : ComponentActivity() {
@@ -58,6 +59,7 @@ private fun TrackerScreen() {
     var selectedType by remember { mutableStateOf(ActivityType.JOGGING) }
     val state = stats?.state ?: SessionState.IDLE
     val active = state == SessionState.RUNNING || state == SessionState.PAUSED
+    var showMap by remember { mutableStateOf(false) }
 
     // REQ-6: ask for permissions, then start the foreground service.
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -68,6 +70,13 @@ private fun TrackerScreen() {
         } else {
             Toast.makeText(context, "Precise location permission is required to track", Toast.LENGTH_LONG).show()
         }
+    }
+
+    // REQ-7: the map follows the live stats, so the path keeps growing while it is open.
+    val track = stats?.track.orEmpty()
+    if (showMap) {
+        RouteMapScreen(track = track, onClose = { showMap = false })
+        return
     }
 
     Column(
@@ -112,5 +121,8 @@ private fun TrackerScreen() {
                 }
             }
         }
+
+        // REQ-7: enabled once a position has been recorded.
+        OutlinedButton(onClick = { showMap = true }, enabled = hasRoute(track)) { Text("Map") }
     }
 }

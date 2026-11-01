@@ -12,6 +12,7 @@ An Android app that records your route, distance, time and speed while jogging o
 | REQ-4 | **Elapsed time** — The session shows the active time, excluding time spent paused, formatted as `MM:SS` (or `H:MM:SS` from one hour). |
 | REQ-5 | **Speed / pace** — The session shows the average speed over the active time: pace in `min:ss /km` for jogging, `km/h` for cycling. Distance is shown in km with two decimals. |
 | REQ-6 | **Background tracking & permissions** — Tracking keeps running with the screen off through a foreground service with a persistent notification. Before starting, the app requests precise location permission (plus notification permission on Android 13+); tracking only starts when location permission is granted. |
+| REQ-7 | **Route map** — A *Map* button, enabled once a position has been recorded, opens a map (OpenStreetMap) showing the path taken so far, with the latest position marked. The path keeps growing while the map is open, and the gap between pausing and resuming is not drawn. |
 
 ## Project layout
 
@@ -27,3 +28,29 @@ Requires JDK 17 and the Android SDK (platform 35).
 ./gradlew testDebugUnitTest   # run the requirement tests
 ./gradlew assembleDebug       # build the APK
 ```
+
+If `java` is not on your path, point Gradle at a JDK 17 first, e.g. `export JAVA_HOME=/opt/homebrew/opt/openjdk@17` (Homebrew `openjdk@17`). The SDK location is read from `local.properties` (`sdk.dir=...`), which is not committed.
+
+## Deploy to a phone
+
+1. **Enable developer mode** — tap *Build number* seven times (Samsung: *Settings › About phone › Software information*; Pixel: *Settings › About phone*).
+2. **Connect the phone** with `adb` (in `<sdk>/platform-tools`), either:
+   - **USB** — enable *Developer options › USB debugging*, plug in the cable and accept the prompt on the phone; or
+   - **Wi‑Fi** (Android 11+, phone and computer on the same network) — enable *Developer options › Wireless debugging*, tap *Pair device with pairing code*, then:
+     ```sh
+     adb pair <ip>:<pairing-port>     # enter the pairing code shown on the phone
+     adb connect <ip>:<port>          # the IP address & port shown on the Wireless debugging screen
+     ```
+3. **Check** the phone is listed as `device` (not `unauthorized`):
+   ```sh
+   adb devices -l
+   ```
+4. **Build, install and launch** (`-r` replaces an existing install and keeps its data):
+   ```sh
+   ./gradlew assembleDebug
+   adb install -r app/build/outputs/apk/debug/app-debug.apk
+   adb shell am start -n com.example.gpstracker/.MainActivity
+   ```
+   `./gradlew installDebug` builds and installs in one step. With several devices connected, add `-s <serial>` to the `adb` commands (or set `ANDROID_SERIAL`).
+
+Reinstalling stops a running tracking session. On first start, grant precise location (and notifications) when asked. The route map needs an internet connection for its map tiles.

@@ -54,12 +54,7 @@ fun kmVoiceNote(km: Int, elapsedMillis: Long, lastKmMillis: Long): String {
     val distance = if (km == 1) "1 kilometre" else "$km kilometres"
     val paceSeconds = Math.round(lastKmMillis / 1000.0)
     val pace = spokenDuration(paceSeconds / 60, paceSeconds % 60)
-    val totalSeconds = elapsedMillis / 1000
-    val time = listOfNotNull(
-        (totalSeconds / 3600).takeIf { it > 0 }?.let { unit(it, "hour") },
-        spokenDuration((totalSeconds % 3600) / 60, totalSeconds % 60),
-    ).joinToString(" ")
-    return "$distance. Time $time. Last kilometre $pace per kilometre."
+    return "$distance. Time ${spokenTime(elapsedMillis)}. Last kilometre $pace per kilometre."
 }
 
 /** REQ-20: the whole minutes of active time in [elapsedMillis], each of which is announced once it is reached. */
@@ -77,6 +72,26 @@ fun minuteVoiceNote(minutes: Long, distanceMeters: Double): String {
     if (distanceMeters < 1.0) return note
     val paceSeconds = Math.round(minutes * 60 * 1000.0 / distanceMeters)
     return "$note Average pace ${spokenDuration(paceSeconds / 60, paceSeconds % 60)} per kilometre."
+}
+
+/**
+ * REQ-25: the spoken report when the screen is turned on: the active time, the total distance in kilometres
+ * (two decimals) and the average pace so far (left out before any distance is covered).
+ */
+fun screenOnVoiceNote(elapsedMillis: Long, distanceMeters: Double): String {
+    val km = String.format(Locale.US, "%.2f", distanceMeters / 1000)
+    val note = "Time ${spokenTime(elapsedMillis)}. Distance $km kilometres."
+    if (distanceMeters < 1.0) return note
+    val paceSeconds = Math.round(elapsedMillis / distanceMeters)
+    return "$note Average pace ${spokenDuration(paceSeconds / 60, paceSeconds % 60)} per kilometre."
+}
+
+private fun spokenTime(elapsedMillis: Long): String {
+    val totalSeconds = elapsedMillis / 1000
+    return listOfNotNull(
+        (totalSeconds / 3600).takeIf { it > 0 }?.let { unit(it, "hour") },
+        spokenDuration((totalSeconds % 3600) / 60, totalSeconds % 60),
+    ).joinToString(" ")
 }
 
 private fun spokenDuration(minutes: Long, seconds: Long) = "${unit(minutes, "minute")} ${unit(seconds, "second")}"

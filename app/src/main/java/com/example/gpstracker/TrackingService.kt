@@ -37,6 +37,7 @@ import com.example.gpstracker.domain.kmVoiceNote
 import com.example.gpstracker.domain.minuteVoiceNote
 import com.example.gpstracker.domain.notificationContent
 import com.example.gpstracker.domain.runRecord
+import com.example.gpstracker.domain.screenOnVoiceNote
 import com.example.gpstracker.domain.toGpx
 import java.io.File
 import java.time.ZoneId
@@ -65,6 +66,9 @@ class TrackingService : Service() {
     private var shownNotification: NotificationContent? = null
     private lateinit var voiceNotes: VoiceNotes
 
+    /** REQ-25: the report waits for the batched positions so it gives the distance up to now. */
+    private var reportAfterFlush = false
+
     /** REQ-20: the whole minutes of active time already reached, so each minute is announced once. */
     private var minutesReached = 0L
 
@@ -74,15 +78,28 @@ class TrackingService : Service() {
         // REQ-11: a batch delivered after the screen was off is recorded in one go and published once.
         override fun onLocationChanged(locations: MutableList<Location>) = onLocations(locations)
 
-        override fun onFlushComplete(requestCode: Int) = updateGps()
+        override fun onFlushComplete(requestCode: Int) {
+            updateGps()
+            if (reportAfterFlush) {
+                reportAfterFlush = false
+                announceReport()
+            }
+        }
     }
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             screenOn = intent.action == Intent.ACTION_SCREEN_ON
             if (screenOn) {
+                // REQ-25: pressing the power button with the screen off turns it on, which is what asks for the report.
+                val report = SettingsRepository.settings.value.screenOnNote
                 // Deliver the held-back positions first so the screen shows the whole track, then go live.
-                if (!flushGps()) updateGps()
+                if (flushGps()) {
+                    reportAfterFlush = report
+                } else {
+                    updateGps()
+                    if (report) announceReport()
+                }
                 TrackingRepository.publish()
                 updateNotification()
             } else {
@@ -281,6 +298,14 @@ class TrackingService : Service() {
         if (minutes <= minutesReached) return
         minutesReached = minutes
         if (SettingsRepository.settings.value.minuteNotes) voiceNotes.speak(minuteVoiceNote(minutes, stats.distanceMeters))
+    }
+
+    /** REQ-25: speaks the time, distance and average pace of the running or paused session. */
+    private fun announceReport() {
+        val session = TrackingRepository.session ?: return
+        if (session.state != SessionState.RUNNING && session.state != SessionState.PAUSED) return
+        val stats = session.stats()
+        voiceNotes.speak(screenOnVoiceNote(stats.elapsedMillis, stats.distanceMeters))
     }
 
     private fun createChannel() {

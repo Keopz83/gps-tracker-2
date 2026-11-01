@@ -25,4 +25,9 @@ class SettingsTest {
     fun `REQ-21 notes are spoken in a female voice until the user picks the male one`() {
         assertEquals(VoiceGender.FEMALE, Settings().voice)
     }
+
+    @Test
+    fun `REQ-25 the screen-on report is off until turned on in the settings`() {
+        assertFalse(Settings().screenOnNote)
+    }
 }

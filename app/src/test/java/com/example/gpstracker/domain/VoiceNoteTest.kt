@@ -52,4 +52,20 @@ class VoiceNoteTest {
         val settings = Settings(minuteNotes = true)
         assertEquals(VOICE_NOTES_BATCH_MILLIS, gpsRequest(SessionState.RUNNING, 0, screenOn = false, voiceNotes = settings.anyVoiceNotes)?.maxDelayMillis)
     }
+
+    @Test
+    fun `REQ-25 the screen-on report gives the time, total distance and average pace`() {
+        assertEquals(
+            "Time 16 minutes 5 seconds. Distance 3.02 kilometres. Average pace 5 minutes 20 seconds per kilometre.",
+            screenOnVoiceNote(elapsedMillis = (16 * 60 + 5) * 1000L, distanceMeters = 3015.6),
+        )
+    }
+
+    @Test
+    fun `REQ-25 the screen-on report speaks hours and leaves the pace out before any distance`() {
+        assertEquals(
+            "Time 1 hour 0 minutes 1 second. Distance 0.00 kilometres.",
+            screenOnVoiceNote(elapsedMillis = 3_601_000, distanceMeters = 0.0),
+        )
+    }
 }

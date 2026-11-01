@@ -19,7 +19,7 @@ import com.example.gpstracker.domain.VoiceGender
 
 /**
  * REQ-13: the settings view. REQ-14: the kilometre voice note and whether other audio pauses for it.
- * REQ-20: the minute voice note. REQ-21: the voice.
+ * REQ-20: the minute voice note. REQ-25: the report when the screen is turned on. REQ-21: the voice.
  */
 @Composable
 fun SettingsScreen(settings: Settings, onChange: (Settings) -> Unit) {
@@ -36,6 +36,11 @@ fun SettingsScreen(settings: Settings, onChange: (Settings) -> Unit) {
             description = "Time, total distance and average pace",
             checked = settings.minuteNotes,
         ) { onChange(settings.copy(minuteNotes = it)) }
+        SwitchSetting(
+            title = "Voice report on power button",
+            description = "Press the power button once with the screen off to hear time, distance and average pace",
+            checked = settings.screenOnNote,
+        ) { onChange(settings.copy(screenOnNote = it)) }
         SwitchSetting(
             title = "Pause other audio",
             description = "Music pauses while a note plays, instead of getting quieter",

@@ -206,7 +206,10 @@ class TrackingService : Service() {
         TrackingRepository.session?.takeIf { it.state == SessionState.RUNNING || it.state == SessionState.PAUSED }?.let {
             it.stop()
             TrackingRepository.saved(saveRun(it))
-            runRecord(it.stats())?.let { record -> TrackingRepository.recorded(record, filesDir) } // REQ-9
+            runRecord(it.stats())?.let { record ->
+                TrackingRepository.recorded(record, filesDir) // REQ-9
+                TrackingRepository.namePlaces(this)
+            }
         }
         TrackingRepository.publish()
         locationManager.removeUpdates(listener)

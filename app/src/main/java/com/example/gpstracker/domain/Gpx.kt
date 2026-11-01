@@ -58,3 +58,16 @@ fun gpxFileName(activityType: ActivityType, startMillis: Long, zone: ZoneId): St
 }
 
 private fun isoTime(millis: Long): String = DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(millis))
+
+private val TRKSEG = Regex("""<trkseg>(.*?)</trkseg>""", RegexOption.DOT_MATCHES_ALL)
+private val TRKPT = Regex("""<trkpt lat="([-0-9.]+)" lon="([-0-9.]+)"><time>([^<]+)</time></trkpt>""")
+
+/** REQ-17: the track of a saved run (REQ-8), one list of positions per segment, to show it on the map. */
+fun parseGpxTrack(gpx: String): List<List<LocationFix>> = TRKSEG.findAll(gpx).map { segment ->
+    TRKPT.findAll(segment.groupValues[1]).mapNotNull { point ->
+        val lat = point.groupValues[1].toDoubleOrNull() ?: return@mapNotNull null
+        val lon = point.groupValues[2].toDoubleOrNull() ?: return@mapNotNull null
+        val time = runCatching { Instant.parse(point.groupValues[3]).toEpochMilli() }.getOrNull() ?: return@mapNotNull null
+        LocationFix(lat, lon, accuracyMeters = 0f, timeMillis = time)
+    }.toList()
+}.filter { it.isNotEmpty() }.toList()

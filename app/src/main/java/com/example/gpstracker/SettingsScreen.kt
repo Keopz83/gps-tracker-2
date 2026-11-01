@@ -1,12 +1,10 @@
 package com.example.gpstracker
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -18,14 +16,9 @@ import com.example.gpstracker.domain.Settings
 
 /** REQ-13: the settings view. REQ-14: the voice note option. */
 @Composable
-fun SettingsScreen(settings: Settings, onChange: (Settings) -> Unit, onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
-
+fun SettingsScreen(settings: Settings, onChange: (Settings) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onClose) { Text("Back") }
-            Text("Settings", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 16.dp))
-        }
+        Text("Settings", style = MaterialTheme.typography.titleLarge)
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
             verticalAlignment = Alignment.CenterVertically,

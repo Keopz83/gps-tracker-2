@@ -34,6 +34,9 @@ class RunHistoryTest {
         assertEquals(1_000_000L, record.startMillis)
         assertEquals(90_000L, record.elapsedMillis)
         assertEquals(200.0, record.distanceMeters, 0.01)
+        assertEquals(fixAt(0.0, 1_000).latitude, record.startLatitude!!, 0.0)
+        assertEquals(fixAt(0.0, 1_000).longitude, record.startLongitude!!, 0.0)
+        assertNull(record.place)
     }
 
     @Test
@@ -74,5 +77,54 @@ class RunHistoryTest {
     @Test
     fun `REQ-9 the run date is shown in local time`() {
         assertEquals("2026-10-26 08:33", formatRunDate(1_793_000_000_000, ZoneId.of("Europe/Amsterdam")))
+    }
+
+    @Test
+    fun `REQ-9 the start position and place name are saved and read back`() {
+        val file = File(folder.root, "history.tsv")
+        val run = RunRecord(ActivityType.JOGGING, 1_793_000_000_000, 1_800_000, 5_000.0, 47.3769, 8.5417, "Zürich")
+        RunHistory(file).add(run)
+
+        assertEquals(listOf(run), RunHistory(file).load())
+    }
+
+    @Test
+    fun `REQ-9 runs saved before places were stored are still read`() {
+        val file = File(folder.root, "history.tsv")
+        file.writeText("JOGGING\t1793000000000\t1800000\t5000.0\n")
+
+        assertEquals(listOf(RunRecord(ActivityType.JOGGING, 1_793_000_000_000, 1_800_000, 5_000.0)), RunHistory(file).load())
+    }
+
+    @Test
+    fun `REQ-9 a run's place name is added to the saved history`() {
+        val file = File(folder.root, "history.tsv")
+        val older = RunRecord(ActivityType.JOGGING, 1_793_000_000_000, 1_800_000, 5_000.0)
+        val newer = RunRecord(ActivityType.CYCLING, 1_793_100_000_000, 3_725_000, 42_195.0, 46.0, 7.7)
+        RunHistory(file).add(older)
+        RunHistory(file).add(newer)
+
+        val named = newer.copy(place = "Zermatt")
+        RunHistory(file).update(named)
+
+        assertEquals(listOf(named, older), RunHistory(file).load())
+    }
+
+    @Test
+    fun `REQ-9 the place name is the town, else the district, region or country`() {
+        assertEquals("Zermatt", placeName("Zermatt", "Visp", "Valais", "Switzerland"))
+        assertEquals("Visp", placeName(null, "Visp", "Valais", "Switzerland"))
+        assertEquals("Switzerland", placeName(" ", null, "", "Switzerland"))
+        assertNull(placeName(null, null, null, null))
+    }
+
+    @Test
+    fun `REQ-9 the start of an older run is read from its GPX file`() {
+        val gpx = toGpx(ActivityType.JOGGING, listOf(listOf(fixAt(0.0, 1_000), fixAt(200.0, 1_060))))!!
+
+        val (lat, lon) = firstGpxPosition(gpx)!!
+
+        assertEquals(fixAt(0.0, 1_000).latitude, lat, 1e-6)
+        assertEquals(fixAt(0.0, 1_000).longitude, lon, 1e-6)
     }
 }

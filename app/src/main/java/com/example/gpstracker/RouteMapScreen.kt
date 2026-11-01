@@ -2,16 +2,17 @@ package com.example.gpstracker
 
 import android.content.Context
 import android.graphics.Color
-import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -19,12 +20,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.gpstracker.domain.LocationFix
+import com.example.gpstracker.domain.RunRecord
+import com.example.gpstracker.domain.hasRoute
 import com.example.gpstracker.domain.lastPosition
 import com.example.gpstracker.domain.routeBounds
 import org.maplibre.android.MapLibre
@@ -60,10 +64,33 @@ private const val ROUTE_SOURCE = "route"
 private const val POSITION_SOURCE = "position"
 private val ROUTE_COLOR = Color.rgb(0x1E, 0x88, 0xE5)
 
-/** REQ-7: OpenStreetMap view of the path taken so far, one line per segment so paused gaps are not drawn. */
+/**
+ * REQ-7: OpenStreetMap view of [track], once a position has been recorded.
+ * REQ-17: [run] is summarised on one line at the bottom of the map, as in the history.
+ */
 @Composable
-fun RouteMapScreen(track: List<List<LocationFix>>, onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
+fun RouteMapScreen(track: List<List<LocationFix>>, run: RunRecord?) {
+    if (!hasRoute(track) || run == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No route yet") }
+        return
+    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        // A new map for another run, so it zooms to that run.
+        key(run.activityType, run.startMillis) { RouteMap(track) }
+        RunLine(
+            run = run,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(colorResource(R.color.gradient_purple).copy(alpha = 0.85f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        )
+    }
+}
+
+/** REQ-7: the map itself, one line per segment so paused gaps are not drawn. */
+@Composable
+private fun RouteMap(track: List<List<LocationFix>>) {
     val context = LocalContext.current
     val mapView = remember { createMapView(context) }
     val currentTrack by rememberUpdatedState(track)
@@ -103,13 +130,7 @@ fun RouteMapScreen(track: List<List<LocationFix>>, onClose: () -> Unit) {
         style?.let { drawRoute(it, track) }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-        Button(
-            onClick = onClose,
-            modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
-        ) { Text("Back") }
-    }
+    AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 }
 
 private fun createMapView(context: Context): MapView {

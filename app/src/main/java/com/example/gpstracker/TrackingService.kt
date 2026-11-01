@@ -24,6 +24,10 @@ import com.example.gpstracker.domain.SessionState
 import com.example.gpstracker.domain.TrackingSession
 import com.example.gpstracker.domain.formatDistance
 import com.example.gpstracker.domain.formatDuration
+import com.example.gpstracker.domain.gpxFileName
+import com.example.gpstracker.domain.toGpx
+import java.io.File
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -92,12 +96,24 @@ class TrackingService : Service() {
     }
 
     private fun stop() {
-        TrackingRepository.session?.takeIf { it.state == SessionState.RUNNING || it.state == SessionState.PAUSED }?.stop()
+        TrackingRepository.session?.takeIf { it.state == SessionState.RUNNING || it.state == SessionState.PAUSED }?.let {
+            it.stop()
+            TrackingRepository.saved(saveRun(it))
+        }
         TrackingRepository.publish()
         locationManager.removeUpdates(listener)
         ticker?.cancel()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /** REQ-8: stores the run as a GPX file in the app's `runs` folder, or returns null when nothing was recorded. */
+    private fun saveRun(session: TrackingSession): File? {
+        val track = session.stats().track
+        val gpx = toGpx(session.activityType, track) ?: return null
+        val start = track.first { it.isNotEmpty() }.first().timeMillis
+        val dir = File(filesDir, RUNS_DIR).apply { mkdirs() }
+        return File(dir, gpxFileName(session.activityType, start, ZoneId.systemDefault())).apply { writeText(gpx) }
     }
 
     private fun onLocation(location: Location) {
@@ -154,6 +170,7 @@ class TrackingService : Service() {
         private const val CHANNEL_ID = "tracking"
         private const val NOTIFICATION_ID = 1
         private const val UPDATE_INTERVAL_MILLIS = 1_000L
+        const val RUNS_DIR = "runs"
 
         fun start(context: Context, activityType: ActivityType) {
             val intent = Intent(context, TrackingService::class.java)

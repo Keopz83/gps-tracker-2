@@ -1,5 +1,7 @@
 package com.example.gpstracker
 
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -29,8 +31,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gpstracker.domain.ActivityType
+import com.example.gpstracker.domain.GPX_MIME_TYPE
 import com.example.gpstracker.domain.SessionState
 import com.example.gpstracker.domain.canStartTracking
 import com.example.gpstracker.domain.formatDistance
@@ -38,6 +42,7 @@ import com.example.gpstracker.domain.formatDuration
 import com.example.gpstracker.domain.formatSpeed
 import com.example.gpstracker.domain.hasRoute
 import com.example.gpstracker.domain.requiredPermissions
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,6 +61,7 @@ class MainActivity : ComponentActivity() {
 private fun TrackerScreen() {
     val context = LocalContext.current
     val stats by TrackingRepository.stats.collectAsStateWithLifecycle()
+    val lastRun by TrackingRepository.lastRun.collectAsStateWithLifecycle()
     var selectedType by remember { mutableStateOf(ActivityType.JOGGING) }
     val state = stats?.state ?: SessionState.IDLE
     val active = state == SessionState.RUNNING || state == SessionState.PAUSED
@@ -124,5 +130,20 @@ private fun TrackerScreen() {
 
         // REQ-7: enabled once a position has been recorded.
         OutlinedButton(onClick = { showMap = true }, enabled = hasRoute(track)) { Text("Map") }
+
+        // REQ-8: share the saved GPX file of the stopped run with another app.
+        val run = lastRun
+        if (state == SessionState.STOPPED && run != null) {
+            OutlinedButton(onClick = { shareRun(context, run) }) { Text("Export GPX") }
+        }
     }
+}
+
+private fun shareRun(context: Context, run: File) {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", run)
+    val send = Intent(Intent.ACTION_SEND)
+        .setType(GPX_MIME_TYPE)
+        .putExtra(Intent.EXTRA_STREAM, uri)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.startActivity(Intent.createChooser(send, "Export run"))
 }

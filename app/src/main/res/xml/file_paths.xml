@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- REQ-8: saved runs shared with other apps -->
+<paths>
+    <files-path name="runs" path="runs/" />
+</paths>

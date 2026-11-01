@@ -36,6 +36,13 @@ class BatteryTest {
     }
 
     @Test
+    fun `REQ-26 in long distance mode the GPS reports at the chosen interval, also during a short pause`() {
+        assertEquals(30_000L, gpsRequest(SessionState.RUNNING, 0, screenOn = true, intervalMillis = 30_000L)?.intervalMillis)
+        assertEquals(30_000L, gpsRequest(SessionState.RUNNING, 0, screenOn = false, intervalMillis = 30_000L)?.intervalMillis)
+        assertEquals(GpsRequest(30_000L, 0L), gpsRequest(SessionState.PAUSED, 0, screenOn = false, intervalMillis = 30_000L))
+    }
+
+    @Test
     fun `REQ-11 the pause duration starts again on every pause`() {
         val session = TrackingSession(ActivityType.JOGGING, clock::now).apply { start() }
         session.pause()

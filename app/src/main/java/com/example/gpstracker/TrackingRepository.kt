@@ -1,5 +1,6 @@
 package com.example.gpstracker
 
+import com.example.gpstracker.domain.ActiveRun
 import com.example.gpstracker.domain.RunHistory
 import com.example.gpstracker.domain.RunRecord
 import android.content.Context
@@ -62,8 +63,14 @@ object TrackingRepository {
     /** REQ-9: reads the stored history once per process; the service and the UI may both ask for it. */
     fun loadHistory(filesDir: File) {
         if (runHistory != null) return
-        runHistory = RunHistory(File(filesDir, HISTORY_FILE)).also { _history.value = it.load() }
+        val history = RunHistory(File(filesDir, HISTORY_FILE))
+        // REQ-27: a session left unfinished when the app was closed becomes a run, unless it is still running here.
+        if (session == null) activeRun(filesDir).recover(history, File(filesDir, TrackingService.RUNS_DIR), ZoneId.systemDefault())
+        runHistory = history.also { _history.value = it.load() }
     }
+
+    /** REQ-27: where the session in progress is kept while it runs. */
+    fun activeRun(filesDir: File): ActiveRun = ActiveRun(File(filesDir, ACTIVE_DIR))
 
     fun recorded(record: RunRecord, filesDir: File) {
         loadHistory(filesDir)
@@ -128,4 +135,5 @@ object TrackingRepository {
         File(File(filesDir, TrackingService.RUNS_DIR), gpxFileName(run.activityType, run.startMillis, ZoneId.systemDefault()))
 
     private const val HISTORY_FILE = "history.tsv"
+    private const val ACTIVE_DIR = "active"
 }

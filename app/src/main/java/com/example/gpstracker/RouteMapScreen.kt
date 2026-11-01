@@ -104,7 +104,7 @@ fun RouteMapScreen(
             Text("No route yet", modifier = Modifier.align(Alignment.Center))
         }
         if (routeShown || activeState != null) {
-            // The card has the colour of the bar of icons, very slightly see-through, and floats above it.
+            // The card has the colour of the bar of icons, slightly less see-through, and floats above it.
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

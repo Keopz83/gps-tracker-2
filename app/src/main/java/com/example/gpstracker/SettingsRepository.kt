@@ -25,6 +25,8 @@ object SettingsRepository {
             voice = VoiceGender.entries.firstOrNull { it.name == prefs.getString(KEY_VOICE, null) } ?: defaults.voice,
             pauseOtherAudio = prefs.getBoolean(KEY_PAUSE_OTHER_AUDIO, defaults.pauseOtherAudio),
             screenOnNote = prefs.getBoolean(KEY_SCREEN_ON_NOTE, defaults.screenOnNote),
+            longDistance = prefs.getBoolean(KEY_LONG_DISTANCE, defaults.longDistance),
+            longDistanceSeconds = prefs.getInt(KEY_LONG_DISTANCE_SECONDS, defaults.longDistanceSeconds),
         )
     }
 
@@ -35,6 +37,8 @@ object SettingsRepository {
             .putString(KEY_VOICE, settings.voice.name)
             .putBoolean(KEY_PAUSE_OTHER_AUDIO, settings.pauseOtherAudio)
             .putBoolean(KEY_SCREEN_ON_NOTE, settings.screenOnNote)
+            .putBoolean(KEY_LONG_DISTANCE, settings.longDistance)
+            .putInt(KEY_LONG_DISTANCE_SECONDS, settings.longDistanceSeconds)
             .apply()
         _settings.value = settings
     }
@@ -47,4 +51,6 @@ object SettingsRepository {
     private const val KEY_VOICE = "voice"
     private const val KEY_PAUSE_OTHER_AUDIO = "pauseOtherAudio"
     private const val KEY_SCREEN_ON_NOTE = "screenOnNote"
+    private const val KEY_LONG_DISTANCE = "longDistance"
+    private const val KEY_LONG_DISTANCE_SECONDS = "longDistanceSeconds"
 }

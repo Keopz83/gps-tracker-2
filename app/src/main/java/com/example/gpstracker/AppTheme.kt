@@ -55,10 +55,13 @@ fun AppTheme(content: @Composable () -> Unit) {
 }
 
 /**
- * REQ-17: the opacity of everything laid over the map (the bar of icons, the app name and the run card): very slightly
- * see-through. Over the gradient of the other views it cannot be seen.
+ * REQ-17: the opacity of the run card laid over the map: very slightly see-through. Over the gradient of the other
+ * views it cannot be seen.
  */
 const val OVERLAY_ALPHA = 0.9f
+
+/** REQ-17: the opacity of the bars along the top and the bottom, more see-through than the run card. */
+const val BAR_ALPHA = 0.7f
 
 @Composable
 private fun gradientColors() =

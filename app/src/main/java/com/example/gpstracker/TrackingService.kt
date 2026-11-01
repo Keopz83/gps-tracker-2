@@ -23,6 +23,7 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.example.gpstracker.domain.ACTIVE_RUN_SAVE_MILLIS
 import com.example.gpstracker.domain.ActivityType
 import com.example.gpstracker.domain.GpsRequest
 import com.example.gpstracker.domain.LocationFix
@@ -50,6 +51,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * REQ-6: foreground service that keeps receiving GPS updates while the screen is off.
@@ -60,6 +62,10 @@ class TrackingService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var ticker: Job? = null
     private var pauseTimeout: Job? = null
+    private var activeRunSaver: Job? = null
+
+    /** REQ-27: one write at a time, so the active run is cleared only after a write still in progress. */
+    private val activeRunIo = Dispatchers.IO.limitedParallelism(1)
     private lateinit var locationManager: LocationManager
     private var screenOn = true
     private var activeGpsRequest: GpsRequest? = null
@@ -115,6 +121,7 @@ class TrackingService : Service() {
         voiceNotes = VoiceNotes(this)
         SettingsRepository.load(this)
         // REQ-14, REQ-20: turning voice notes on or off during a run changes how long positions may be batched.
+        // REQ-26: turning long distance mode on or off changes how often they are measured.
         scope.launch { SettingsRepository.settings.drop(1).collect { updateGps() } }
         screenOn = getSystemService(PowerManager::class.java).isInteractive
         ContextCompat.registerReceiver(
@@ -170,13 +177,31 @@ class TrackingService : Service() {
         )
         updateGps()
         updateTicker()
+        saveActiveRun(session)
+    }
+
+    /** REQ-27: writes the session to file every 10 s, whenever it has new positions, until it is stopped. */
+    private fun saveActiveRun(session: TrackingSession) {
+        val activeRun = TrackingRepository.activeRun(filesDir)
+        activeRunSaver = scope.launch {
+            var savedPositions = 0
+            while (isActive) {
+                delay(ACTIVE_RUN_SAVE_MILLIS)
+                val stats = session.stats()
+                val positions = stats.track.sumOf { it.size }
+                if (positions == savedPositions) continue
+                savedPositions = positions
+                withContext(activeRunIo) { activeRun.save(stats) }
+            }
+        }
     }
 
     /** REQ-11: applies the GPS request for the current session state and screen, or switches the GPS off. */
     @SuppressLint("MissingPermission") // MainActivity only starts the service after location permission is granted.
     private fun updateGps() {
         val session = TrackingRepository.session
-        val request = session?.let { gpsRequest(it.state, it.pausedMillis, screenOn, SettingsRepository.settings.value.anyVoiceNotes) }
+        val settings = SettingsRepository.settings.value
+        val request = session?.let { gpsRequest(it.state, it.pausedMillis, screenOn, settings.anyVoiceNotes, settings.gpsIntervalMillis) }
         if (request == activeGpsRequest) return
         activeGpsRequest = request
         when {
@@ -234,6 +259,11 @@ class TrackingService : Service() {
                 TrackingRepository.namePlaces(this)
             }
         }
+        // REQ-27: the run is saved now, so the copy kept while it ran is no longer needed.
+        activeRunSaver?.cancel()
+        val activeRun = TrackingRepository.activeRun(filesDir)
+        // Not in the service's scope, which is cancelled as the service stops.
+        CoroutineScope(activeRunIo).launch { activeRun.clear() }
         TrackingRepository.publish()
         locationManager.removeUpdates(listener)
         activeGpsRequest = null

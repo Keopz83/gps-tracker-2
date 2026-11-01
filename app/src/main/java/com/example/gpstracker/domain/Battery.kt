@@ -18,10 +18,19 @@ const val PAUSE_GPS_GRACE_MILLIS = 60_000L
  */
 data class GpsRequest(val intervalMillis: Long, val maxDelayMillis: Long)
 
-/** REQ-11: the GPS request for the session [state], or null when the GPS should be off. */
-fun gpsRequest(state: SessionState, pausedMillis: Long, screenOn: Boolean, voiceNotes: Boolean = false): GpsRequest? = when (state) {
+/**
+ * REQ-11: the GPS request for the session [state], or null when the GPS should be off.
+ * REQ-26: [intervalMillis] is longer in long distance mode.
+ */
+fun gpsRequest(
+    state: SessionState,
+    pausedMillis: Long,
+    screenOn: Boolean,
+    voiceNotes: Boolean = false,
+    intervalMillis: Long = GPS_INTERVAL_MILLIS,
+): GpsRequest? = when (state) {
     SessionState.RUNNING -> GpsRequest(
-        GPS_INTERVAL_MILLIS,
+        intervalMillis,
         when {
             screenOn -> 0L
             voiceNotes -> VOICE_NOTES_BATCH_MILLIS
@@ -29,7 +38,7 @@ fun gpsRequest(state: SessionState, pausedMillis: Long, screenOn: Boolean, voice
         },
     )
     // Not batched while paused: positions held back during the pause must not arrive after resuming and be recorded.
-    SessionState.PAUSED -> if (pausedMillis < PAUSE_GPS_GRACE_MILLIS) GpsRequest(GPS_INTERVAL_MILLIS, 0L) else null
+    SessionState.PAUSED -> if (pausedMillis < PAUSE_GPS_GRACE_MILLIS) GpsRequest(intervalMillis, 0L) else null
     SessionState.IDLE, SessionState.STOPPED -> null
 }
 

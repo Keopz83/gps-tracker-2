@@ -238,14 +238,13 @@ private fun TrackerScreen() {
                 }
             }
         }
-        // REQ-10: the app icon and name over the top left corner of every view.
+        // REQ-10: the app icon and name at the top left of every view, in a bar across the top like the one at the bottom.
         // Its gradient backdrop cannot be seen on the other views but keeps the name readable over the map.
         Row(
             modifier = Modifier
-                .padding(start = 10.dp, top = 8.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .screenGradientBackground(alpha = OVERLAY_ALPHA)
-                .padding(start = 6.dp, top = 6.dp, end = 12.dp, bottom = 6.dp),
+                .fillMaxWidth()
+                .screenGradientBackground(alpha = BAR_ALPHA)
+                .padding(start = 16.dp, top = 8.dp, end = 12.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -258,7 +257,7 @@ private fun TrackerScreen() {
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
-                .screenGradientBackground(alpha = OVERLAY_ALPHA)
+                .screenGradientBackground(alpha = BAR_ALPHA)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

@@ -54,16 +54,22 @@ fun AppTheme(content: @Composable () -> Unit) {
     }
 }
 
+/**
+ * REQ-17: the opacity of everything laid over the map (the bar of icons, the app name and the run card): very slightly
+ * see-through. Over the gradient of the other views it cannot be seen.
+ */
+const val OVERLAY_ALPHA = 0.9f
+
 @Composable
 private fun gradientColors() =
     listOf(colorResource(R.color.gradient_red), colorResource(R.color.gradient_purple), colorResource(R.color.gradient_blue))
 
 /**
  * REQ-17: fills the element with the part of the screen gradient (REQ-10) that lies behind it, so an overlay has
- * exactly the colour of the bar of icons next to it.
+ * exactly the colour of the bar of icons next to it; [alpha] below 1 lets what is under it show through.
  */
 @Composable
-fun Modifier.screenGradientBackground(): Modifier {
+fun Modifier.screenGradientBackground(alpha: Float = 1f): Modifier {
     val colors = gradientColors()
     var position by remember { mutableStateOf(Offset.Zero) }
     var screen by remember { mutableStateOf(Offset.Zero) }
@@ -72,6 +78,6 @@ fun Modifier.screenGradientBackground(): Modifier {
         val root = it.findRootCoordinates().size
         screen = Offset(root.width.toFloat(), root.height.toFloat())
     }.drawBehind {
-        drawRect(Brush.linearGradient(colors, start = -position, end = screen - position))
+        drawRect(Brush.linearGradient(colors, start = -position, end = screen - position), alpha = alpha)
     }
 }

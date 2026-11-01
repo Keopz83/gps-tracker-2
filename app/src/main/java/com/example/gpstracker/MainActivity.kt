@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,7 +59,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -185,12 +186,16 @@ private fun TrackerScreen() {
         shownTrack?.takeIf { it.first.startMillis == shownRun.startMillis }?.second.orEmpty() to shownRun
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.weight(1f)) {
-            // REQ-19: the map turns one-finger drags into swipes itself, so the pager leaves them to it.
-            val mapShown = hasRoute(mapTrack) && mapRunRecord != null
-            HorizontalPager(state = pager, userScrollEnabled = page != Page.MAP || !mapShown) { index ->
-                when (pageAt(index)) {
+    // REQ-17: the bar of icons lies over the views, so the map runs on beneath it; the other views stop above it.
+    var barHeight by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
+    Box(modifier = Modifier.fillMaxSize()) {
+        // REQ-19: the map turns one-finger drags into swipes itself, so the pager leaves them to it.
+        val mapShown = hasRoute(mapTrack) && mapRunRecord != null
+        HorizontalPager(state = pager, userScrollEnabled = page != Page.MAP || !mapShown) { index ->
+            val view = pageAt(index)
+            Box(modifier = Modifier.padding(bottom = if (view == Page.MAP) 0.dp else barHeight)) {
+                when (view) {
                     // REQ-13: the settings view.
                     Page.SETTINGS -> SettingsScreen(settings = settings, onChange = { SettingsRepository.update(context, it) })
                     Page.TRACKER -> TrackerView(
@@ -206,6 +211,8 @@ private fun TrackerScreen() {
                     Page.MAP -> RouteMapScreen(
                         track = mapTrack,
                         run = mapRunRecord,
+                        activeState = state.takeIf { active && shownRun == null },
+                        bottomInset = barHeight,
                         onSwipeBy = { pager.dispatchRawDelta(-it) },
                         onSwipeEnd = { step -> scope.launch { pager.animateScrollToPage(index + step) } },
                     )
@@ -221,24 +228,29 @@ private fun TrackerScreen() {
                     )
                 }
             }
-            // REQ-10: the app icon and name over the top left corner of every view.
-            // Its gradient backdrop cannot be seen on the other views but keeps the name readable over the map.
-            Row(
-                modifier = Modifier
-                    .padding(start = 10.dp, top = 8.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .screenGradientBackground()
-                    .padding(start = 6.dp, top = 6.dp, end = 12.dp, bottom = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AppIcon()
-                Text("Summit", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            }
+        }
+        // REQ-10: the app icon and name over the top left corner of every view.
+        // Its gradient backdrop cannot be seen on the other views but keeps the name readable over the map.
+        Row(
+            modifier = Modifier
+                .padding(start = 10.dp, top = 8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .screenGradientBackground(alpha = OVERLAY_ALPHA)
+                .padding(start = 6.dp, top = 6.dp, end = 12.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AppIcon()
+            Text("Summit", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
+                .screenGradientBackground(alpha = OVERLAY_ALPHA)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Spacer(modifier = Modifier.weight(1f))
@@ -314,14 +326,7 @@ private fun TrackerView(
             }
 
             // REQ-1: session controls.
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (state == SessionState.PAUSED) {
-                    Button(onClick = { TrackingService.resume(context) }) { Text("Resume") }
-                } else {
-                    Button(onClick = { TrackingService.pause(context) }) { Text("Pause") }
-                }
-                OutlinedButton(onClick = { TrackingService.stop(context) }) { Text("Stop") }
-            }
+            SessionControls(state)
         }
     }
 }

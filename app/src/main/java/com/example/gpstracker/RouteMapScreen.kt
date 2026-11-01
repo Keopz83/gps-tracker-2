@@ -2,14 +2,18 @@ package com.example.gpstracker
 
 import android.content.Context
 import android.graphics.Color
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.ViewConfiguration
 import android.widget.FrameLayout
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -22,7 +26,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -30,6 +36,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.gpstracker.domain.LocationFix
 import com.example.gpstracker.domain.RunRecord
+import com.example.gpstracker.domain.SessionState
 import com.example.gpstracker.domain.hasRoute
 import com.example.gpstracker.domain.lastPosition
 import com.example.gpstracker.domain.mapSwipeStep
@@ -63,13 +70,19 @@ import org.maplibre.geojson.Point
 private const val STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
 private const val SINGLE_POSITION_ZOOM = 17.0
 private const val BOUNDS_PADDING_PX = 80
+private const val MAP_CREDITS_MARGIN_PX = 24
+
+/** Room left of the attribution icon for the logo, which sits next to it. */
+private const val LOGO_CLEARANCE_PX = 72
 private const val ROUTE_SOURCE = "route"
 private const val POSITION_SOURCE = "position"
 private val ROUTE_COLOR = Color.rgb(0x1E, 0x88, 0xE5)
 
 /**
  * REQ-7: OpenStreetMap view of [track], once a position has been recorded.
- * REQ-17: [run] is summarised on one line at the bottom of the map, as in the history.
+ * REQ-17: [run] is summarised on one line, as in the history, in a card floating above the bar of icons, which lies over
+ * the bottom [bottomInset] of the map. While the map shows an active session ([activeState] not null) the card also
+ * holds its pause/resume and stop buttons.
  * REQ-19: a one-finger drag swipes the views: [onSwipeBy] follows the finger (pixels moved right) and [onSwipeEnd]
  * gets the number of views to move on when it is lifted.
  */
@@ -77,24 +90,36 @@ private val ROUTE_COLOR = Color.rgb(0x1E, 0x88, 0xE5)
 fun RouteMapScreen(
     track: List<List<LocationFix>>,
     run: RunRecord?,
+    activeState: SessionState?,
+    bottomInset: Dp,
     onSwipeBy: (Float) -> Unit,
     onSwipeEnd: (Int) -> Unit,
 ) {
-    if (!hasRoute(track) || run == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No route yet") }
-        return
-    }
+    val routeShown = hasRoute(track) && run != null
     Box(modifier = Modifier.fillMaxSize()) {
-        // A new map for another run, so it zooms to that run.
-        key(run.activityType, run.startMillis) { RouteMap(track, onSwipeBy, onSwipeEnd) }
-        RunLine(
-            run = run,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .screenGradientBackground()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-        )
+        if (routeShown) {
+            // A new map for another run, so it zooms to that run.
+            key(run!!.activityType, run.startMillis) { RouteMap(track, onSwipeBy, onSwipeEnd) }
+        } else {
+            Text("No route yet", modifier = Modifier.align(Alignment.Center))
+        }
+        if (routeShown || activeState != null) {
+            // The card has the colour of the bar of icons, very slightly see-through, and floats above it.
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 12.dp, bottom = bottomInset + 12.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .screenGradientBackground(alpha = OVERLAY_ALPHA)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (routeShown) RunLine(run = run!!, modifier = Modifier.fillMaxWidth())
+                activeState?.let { SessionControls(it, size = 52.dp) }
+            }
+        }
     }
 }
 
@@ -125,6 +150,11 @@ private fun RouteMap(track: List<List<LocationFix>>, onSwipeBy: (Float) -> Unit,
         mapView.getMapAsync { map ->
             // REQ-19: a two-finger drag up or down pans the map instead of tilting it.
             map.uiSettings.isTiltGesturesEnabled = false
+            // REQ-17: the logo and the map credits sit at the top right, clear of the run card at the bottom.
+            map.uiSettings.logoGravity = Gravity.TOP or Gravity.END
+            map.uiSettings.attributionGravity = Gravity.TOP or Gravity.END
+            map.uiSettings.setLogoMargins(0, MAP_CREDITS_MARGIN_PX, MAP_CREDITS_MARGIN_PX + LOGO_CLEARANCE_PX, 0)
+            map.uiSettings.setAttributionMargins(0, MAP_CREDITS_MARGIN_PX, MAP_CREDITS_MARGIN_PX, 0)
             map.setStyle(Style.Builder().fromUri(STYLE_URL)) { loaded ->
                 addRouteLayers(loaded)
                 zoomToRoute(map, currentTrack)

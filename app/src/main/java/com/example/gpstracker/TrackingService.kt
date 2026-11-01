@@ -6,25 +6,33 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.location.LocationRequest
+import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.example.gpstracker.domain.ActivityType
+import com.example.gpstracker.domain.GpsRequest
 import com.example.gpstracker.domain.LocationFix
+import com.example.gpstracker.domain.NotificationContent
+import com.example.gpstracker.domain.PAUSE_GPS_GRACE_MILLIS
 import com.example.gpstracker.domain.SessionState
 import com.example.gpstracker.domain.TrackingSession
-import com.example.gpstracker.domain.formatDistance
-import com.example.gpstracker.domain.formatDuration
+import com.example.gpstracker.domain.gpsRequest
 import com.example.gpstracker.domain.gpxFileName
+import com.example.gpstracker.domain.notificationContent
 import com.example.gpstracker.domain.runRecord
 import com.example.gpstracker.domain.toGpx
 import java.io.File
@@ -38,26 +46,77 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** REQ-6: foreground service that keeps receiving GPS updates while the screen is off. */
+/**
+ * REQ-6: foreground service that keeps receiving GPS updates while the screen is off.
+ * REQ-11: adapts the GPS request, screen refreshes and notification updates to save battery without losing positions.
+ */
 class TrackingService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var ticker: Job? = null
+    private var pauseTimeout: Job? = null
     private lateinit var locationManager: LocationManager
+    private var screenOn = true
+    private var activeGpsRequest: GpsRequest? = null
+    private var shownNotification: NotificationContent? = null
 
-    private val listener = LocationListener { location -> onLocation(location) }
+    private val listener = object : LocationListener {
+        override fun onLocationChanged(location: Location) = onLocations(listOf(location))
+
+        // REQ-11: a batch delivered after the screen was off is recorded in one go and published once.
+        override fun onLocationChanged(locations: MutableList<Location>) = onLocations(locations)
+
+        override fun onFlushComplete(requestCode: Int) = updateGps()
+    }
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            screenOn = intent.action == Intent.ACTION_SCREEN_ON
+            if (screenOn) {
+                // Deliver the held-back positions first so the screen shows the whole track, then go live.
+                if (!flushGps()) updateGps()
+                TrackingRepository.publish()
+                updateNotification()
+            } else {
+                updateGps()
+            }
+            updateTicker()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(LocationManager::class.java)
+        screenOn = getSystemService(PowerManager::class.java).isInteractive
+        ContextCompat.registerReceiver(
+            this,
+            screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         createChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> start(ActivityType.valueOf(intent.getStringExtra(EXTRA_ACTIVITY_TYPE)!!))
-            ACTION_PAUSE -> TrackingRepository.session?.takeIf { it.state == SessionState.RUNNING }?.pause()
-            ACTION_RESUME -> TrackingRepository.session?.takeIf { it.state == SessionState.PAUSED }?.resume()
+            ACTION_PAUSE -> TrackingRepository.session?.takeIf { it.state == SessionState.RUNNING }?.let {
+                it.pause()
+                updateGps()
+                // REQ-11: switch the GPS off once the pause outlasts the grace period.
+                pauseTimeout = scope.launch {
+                    delay(PAUSE_GPS_GRACE_MILLIS)
+                    updateGps()
+                }
+            }
+            ACTION_RESUME -> TrackingRepository.session?.takeIf { it.state == SessionState.PAUSED }?.let {
+                pauseTimeout?.cancel()
+                it.resume()
+                updateGps()
+            }
             ACTION_STOP -> {
                 stop()
                 return START_NOT_STICKY
@@ -68,7 +127,6 @@ class TrackingService : Service() {
         return START_NOT_STICKY
     }
 
-    @SuppressLint("MissingPermission") // MainActivity only starts the service after location permission is granted.
     private fun start(activityType: ActivityType) {
         val session = TrackingSession(activityType, clock = SystemClock::elapsedRealtime)
         session.start()
@@ -80,19 +138,60 @@ class TrackingService : Service() {
             buildNotification(),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
         )
-        locationManager.requestLocationUpdates(
-            LocationManager.GPS_PROVIDER,
-            UPDATE_INTERVAL_MILLIS,
-            0f,
-            listener,
-            Looper.getMainLooper(),
-        )
-        ticker = scope.launch {
-            while (isActive) {
-                delay(1_000)
-                TrackingRepository.publish()
-                updateNotification()
+        updateGps()
+        updateTicker()
+    }
+
+    /** REQ-11: applies the GPS request for the current session state and screen, or switches the GPS off. */
+    @SuppressLint("MissingPermission") // MainActivity only starts the service after location permission is granted.
+    private fun updateGps() {
+        val session = TrackingRepository.session
+        val request = session?.let { gpsRequest(it.state, it.pausedMillis, screenOn) }
+        if (request == activeGpsRequest) return
+        activeGpsRequest = request
+        when {
+            request == null -> locationManager.removeUpdates(listener)
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> locationManager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                LocationRequest.Builder(request.intervalMillis)
+                    .setQuality(LocationRequest.QUALITY_HIGH_ACCURACY)
+                    .setMinUpdateIntervalMillis(request.intervalMillis)
+                    .setMaxUpdateDelayMillis(request.maxDelayMillis)
+                    .build(),
+                mainExecutor,
+                listener,
+            )
+            // Before Android 12 the GPS cannot batch, so positions are delivered as they are measured.
+            else -> locationManager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                request.intervalMillis,
+                0f,
+                listener,
+                Looper.getMainLooper(),
+            )
+        }
+    }
+
+    /** REQ-11: asks for the batched positions to be delivered now; [updateGps] follows once they are. */
+    private fun flushGps(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || (activeGpsRequest?.maxDelayMillis ?: 0L) == 0L) return false
+        locationManager.requestFlush(LocationManager.GPS_PROVIDER, listener, 0)
+        return true
+    }
+
+    /** REQ-11: the elapsed time is refreshed every second only while the screen is on to show it. */
+    private fun updateTicker() {
+        val active = TrackingRepository.session?.state.let { it == SessionState.RUNNING || it == SessionState.PAUSED }
+        if (screenOn && active) {
+            if (ticker?.isActive == true) return
+            ticker = scope.launch {
+                while (isActive) {
+                    delay(1_000)
+                    TrackingRepository.publish()
+                }
             }
+        } else {
+            ticker?.cancel()
         }
     }
 
@@ -104,7 +203,9 @@ class TrackingService : Service() {
         }
         TrackingRepository.publish()
         locationManager.removeUpdates(listener)
+        activeGpsRequest = null
         ticker?.cancel()
+        pauseTimeout?.cancel()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -118,15 +219,22 @@ class TrackingService : Service() {
         return File(dir, gpxFileName(session.activityType, start, ZoneId.systemDefault())).apply { writeText(gpx) }
     }
 
-    private fun onLocation(location: Location) {
+    private fun onLocations(locations: List<Location>) {
         val session = TrackingRepository.session ?: return
-        val fix = LocationFix(
-            latitude = location.latitude,
-            longitude = location.longitude,
-            accuracyMeters = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE,
-            timeMillis = location.time,
-        )
-        if (session.onLocation(fix)) TrackingRepository.publish()
+        val recorded = locations.count { location ->
+            session.onLocation(
+                LocationFix(
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    accuracyMeters = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE,
+                    timeMillis = location.time,
+                ),
+            )
+        }
+        if (recorded > 0) {
+            TrackingRepository.publish()
+            updateNotification()
+        }
     }
 
     private fun createChannel() {
@@ -136,27 +244,35 @@ class TrackingService : Service() {
 
     private fun buildNotification(): Notification {
         val stats = TrackingRepository.stats.value
-        val text = stats?.let { "${formatDuration(it.elapsedMillis)} · ${formatDistance(it.distanceMeters)}" } ?: ""
+        val content = stats?.let(::notificationContent)
+        shownNotification = content
         val openApp = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentTitle(stats?.activityType?.label ?: getString(R.string.app_name))
-            .setContentText(text)
+            .setContentTitle(content?.title ?: getString(R.string.app_name))
+            .setContentText(content?.text ?: "")
+            // REQ-11: the system ticks the elapsed time, so the notification is not rebuilt every second.
+            .setShowWhen(content?.chronometer == true)
+            .setUsesChronometer(content?.chronometer == true)
+            .setWhen(System.currentTimeMillis() - (stats?.elapsedMillis ?: 0L))
             .setContentIntent(openApp)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
     }
 
+    /** REQ-11: refreshes the notification only when what it shows has changed. */
     private fun updateNotification() {
         if (TrackingRepository.session?.state == SessionState.STOPPED) return
+        if (TrackingRepository.stats.value?.let(::notificationContent) == shownNotification) return
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
     }
 
     override fun onDestroy() {
         locationManager.removeUpdates(listener)
+        unregisterReceiver(screenReceiver)
         scope.cancel()
         super.onDestroy()
     }
@@ -171,7 +287,6 @@ class TrackingService : Service() {
         private const val EXTRA_ACTIVITY_TYPE = "activityType"
         private const val CHANNEL_ID = "tracking"
         private const val NOTIFICATION_ID = 1
-        private const val UPDATE_INTERVAL_MILLIS = 1_000L
         const val RUNS_DIR = "runs"
 
         fun start(context: Context, activityType: ActivityType) {

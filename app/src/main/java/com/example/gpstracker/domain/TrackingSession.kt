@@ -27,6 +27,7 @@ class TrackingSession(
     private val segments = mutableListOf<MutableList<LocationFix>>()
     private var accumulatedMillis = 0L
     private var runningSince = 0L
+    private var pausedSince = 0L
 
     // REQ-1
     fun start() {
@@ -37,6 +38,7 @@ class TrackingSession(
     fun pause() {
         check(state == SessionState.RUNNING) { "Cannot pause a session that is $state" }
         accumulatedMillis += clock() - runningSince
+        pausedSince = clock()
         state = SessionState.PAUSED
     }
 
@@ -63,6 +65,10 @@ class TrackingSession(
     /** REQ-4: active time, excluding pauses. */
     val elapsedMillis: Long
         get() = accumulatedMillis + if (state == SessionState.RUNNING) clock() - runningSince else 0L
+
+    /** REQ-11: how long the session has been paused, or 0 when it is not paused. */
+    val pausedMillis: Long
+        get() = if (state == SessionState.PAUSED) clock() - pausedSince else 0L
 
     /** REQ-3: distance summed within each segment. */
     val distanceMeters: Double

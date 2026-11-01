@@ -44,13 +44,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.gpstracker.domain.ActivityType
-import com.example.gpstracker.domain.RunDetails
+import com.example.gpstracker.domain.LocationFix
 import com.example.gpstracker.domain.RunRecord
 import com.example.gpstracker.domain.formatKmPace
 import com.example.gpstracker.domain.formatDistance
 import com.example.gpstracker.domain.formatDuration
 import com.example.gpstracker.domain.formatRunDate
 import com.example.gpstracker.domain.formatSpeed
+import com.example.gpstracker.domain.elevationProfile
+import com.example.gpstracker.domain.paceBars
 import com.example.gpstracker.domain.runDetails
 import com.example.gpstracker.domain.runNumber
 import com.example.gpstracker.domain.selectedRuns
@@ -128,7 +130,7 @@ fun RunHistoryScreen(
                                 },
                                 onLongClick = { selection = toggleSelection(selection, run.startMillis) },
                             )
-                            .padding(vertical = 2.dp, horizontal = 8.dp),
+                            .padding(bottom = 2.dp),
                     )
                 }
             }
@@ -172,46 +174,51 @@ private fun RunBox(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        RunLine(run = run, number = number, checked = checked, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                formatSpeed(run.activityType, run.distanceMeters, run.elapsedMillis),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = onShowOnMap, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Outlined.Map, contentDescription = "Show run on map", modifier = Modifier.size(20.dp))
-            }
-            IconButton(onClick = onShare, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Outlined.Share, contentDescription = "Share run as GPX", modifier = Modifier.size(20.dp))
-            }
-            IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Outlined.Delete, contentDescription = "Delete run", modifier = Modifier.size(20.dp))
+        // REQ-22: while the details are open, the run's line and icons stand out above them as a less see-through header.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (expanded) Color.White.copy(alpha = 0.2f) else Color.Transparent)
+                .padding(top = 2.dp, start = 8.dp, end = 8.dp),
+        ) {
+            RunLine(run = run, number = number, checked = checked, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Average: ${formatSpeed(run.activityType, run.distanceMeters, run.elapsedMillis)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onShowOnMap, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Outlined.Map, contentDescription = "Show run on map", modifier = Modifier.size(20.dp))
+                }
+                IconButton(onClick = onShare, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Outlined.Share, contentDescription = "Share run as GPX", modifier = Modifier.size(20.dp))
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Outlined.Delete, contentDescription = "Delete run", modifier = Modifier.size(20.dp))
+                }
             }
         }
-        if (expanded) RunDetailsView(run, modifier = Modifier.padding(bottom = 8.dp))
+        if (expanded) RunDetailsView(run, modifier = Modifier.padding(top = 10.dp, bottom = 14.dp, start = 16.dp, end = 16.dp))
     }
 }
 
-/** REQ-22: the place in full, the time from start to finish with the pauses, and the time of each kilometre. */
+/** REQ-23: the pace chart and the elevation chart of a run, above the time and pace of each kilometre (REQ-22). */
 @Composable
 private fun RunDetailsView(run: RunRecord, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val details by produceState<RunDetails?>(null, run.startMillis) {
-        value = runDetails(TrackingRepository.loadTrack(context.filesDir, run))
+    val track by produceState<List<List<LocationFix>>?>(null, run.startMillis) {
+        value = TrackingRepository.loadTrack(context.filesDir, run)
     }
+    val shown = track ?: return
+    val details = remember(shown) { runDetails(shown) } ?: return
+    val bars = remember(shown) { paceBars(shown) }
+    val elevation = remember(shown) { elevationProfile(shown) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val style = MaterialTheme.typography.bodyMedium
-        Text("${run.activityType.label}${run.place?.let { " in $it" }.orEmpty()}", style = style)
-        Text("Active time ${formatDuration(run.elapsedMillis)}, distance ${formatDistance(run.distanceMeters)}", style = style)
-        val shown = details ?: return@Column
-        val pauses = when (shown.pauses) {
-            0 -> "no pauses"
-            1 -> "1 pause"
-            else -> "${shown.pauses} pauses"
-        }
-        Text("Start to finish ${formatDuration(shown.totalMillis)}, $pauses", style = style)
-        shown.splits.forEachIndexed { i, millis ->
+        PaceChart(bars, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+        ElevationChart(elevation, modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp))
+        details.splits.forEachIndexed { i, millis ->
             val pace = when (run.activityType) {
                 ActivityType.JOGGING -> formatKmPace(millis)
                 ActivityType.CYCLING -> formatSpeed(ActivityType.CYCLING, 1_000.0, millis)

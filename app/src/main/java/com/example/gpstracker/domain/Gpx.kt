@@ -36,11 +36,13 @@ fun toGpx(activityType: ActivityType, track: List<List<LocationFix>>): String? {
         segments.forEach { segment ->
             appendLine("    <trkseg>")
             segment.forEach { fix ->
+                // REQ-23: the altitude, when known, as `<ele>` (which GPX puts before `<time>`).
+                val ele = fix.altitudeMeters?.let { String.format(Locale.US, "<ele>%.1f</ele>", it) }.orEmpty()
                 appendLine(
                     String.format(
                         Locale.US,
-                        "      <trkpt lat=\"%.7f\" lon=\"%.7f\"><time>%s</time></trkpt>",
-                        fix.latitude, fix.longitude, isoTime(fix.timeMillis),
+                        "      <trkpt lat=\"%.7f\" lon=\"%.7f\">%s<time>%s</time></trkpt>",
+                        fix.latitude, fix.longitude, ele, isoTime(fix.timeMillis),
                     ),
                 )
             }
@@ -60,14 +62,14 @@ fun gpxFileName(activityType: ActivityType, startMillis: Long, zone: ZoneId): St
 private fun isoTime(millis: Long): String = DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(millis))
 
 private val TRKSEG = Regex("""<trkseg>(.*?)</trkseg>""", RegexOption.DOT_MATCHES_ALL)
-private val TRKPT = Regex("""<trkpt lat="([-0-9.]+)" lon="([-0-9.]+)"><time>([^<]+)</time></trkpt>""")
+private val TRKPT = Regex("""<trkpt lat="([-0-9.]+)" lon="([-0-9.]+)">(?:<ele>([^<]+)</ele>)?<time>([^<]+)</time></trkpt>""")
 
-/** REQ-17: the track of a saved run (REQ-8), one list of positions per segment, to show it on the map. */
+/** REQ-17: the track of a saved run (REQ-8), one list of positions per segment, to show it on the map (with altitudes, REQ-23). */
 fun parseGpxTrack(gpx: String): List<List<LocationFix>> = TRKSEG.findAll(gpx).map { segment ->
     TRKPT.findAll(segment.groupValues[1]).mapNotNull { point ->
         val lat = point.groupValues[1].toDoubleOrNull() ?: return@mapNotNull null
         val lon = point.groupValues[2].toDoubleOrNull() ?: return@mapNotNull null
-        val time = runCatching { Instant.parse(point.groupValues[3]).toEpochMilli() }.getOrNull() ?: return@mapNotNull null
-        LocationFix(lat, lon, accuracyMeters = 0f, timeMillis = time)
+        val time = runCatching { Instant.parse(point.groupValues[4]).toEpochMilli() }.getOrNull() ?: return@mapNotNull null
+        LocationFix(lat, lon, accuracyMeters = 0f, timeMillis = time, altitudeMeters = point.groupValues[3].toDoubleOrNull())
     }.toList()
 }.filter { it.isNotEmpty() }.toList()

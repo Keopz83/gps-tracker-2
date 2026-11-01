@@ -1,0 +1,94 @@
+package com.example.gpstracker.domain
+
+/** REQ-23: one bar of the pace chart: the active time it covers (from the start, pauses left out) and its pace, if moving. */
+data class PaceBar(val startMillis: Long, val endMillis: Long, val paceMillisPerKm: Long?)
+
+/** REQ-23: one point of the elevation chart: the active time from the start (pauses left out) and the altitude. */
+data class ElevationPoint(val activeMillis: Long, val meters: Double)
+
+private const val MAX_BARS = 40
+private const val MINUTE = 60_000L
+
+/** REQ-23: the length of a pace bar for a run of [activeMillis]: whole minutes, so the chart has at most 40 bars. */
+fun paceBarMillis(activeMillis: Long): Long = maxOf(1, (activeMillis + MAX_BARS * MINUTE - 1) / (MAX_BARS * MINUTE)) * MINUTE
+
+/**
+ * REQ-23: the pace of each full stretch of [paceBarMillis] active time of a run's [track]; a bar covering less than 10 m
+ * has no pace. Each step between two positions counts towards the bar its middle falls in. The last, unfinished stretch
+ * gets no bar.
+ */
+fun paceBars(track: List<List<LocationFix>>): List<PaceBar> {
+    val segments = track.filter { it.size > 1 }
+    val activeMillis = segments.sumOf { it.last().timeMillis - it.first().timeMillis }
+    val barMillis = paceBarMillis(activeMillis)
+    val count = (activeMillis / barMillis).toInt()
+    if (count == 0) return emptyList()
+    val meters = DoubleArray(count)
+    val millis = LongArray(count)
+    var offset = 0L
+    segments.forEach { segment ->
+        val start = segment.first().timeMillis
+        segment.zipWithNext { from, to ->
+            val middle = offset + (from.timeMillis + to.timeMillis) / 2 - start
+            val bar = (middle / barMillis).toInt()
+            if (bar < count) {
+                meters[bar] += haversineMeters(from, to)
+                millis[bar] += to.timeMillis - from.timeMillis
+            }
+        }
+        offset += segment.last().timeMillis - start
+    }
+    return (0 until count).map { i ->
+        val pace = if (meters[i] >= 10) Math.round(millis[i] * 1000.0 / meters[i]) else null
+        PaceBar(i * barMillis, (i + 1) * barMillis, pace)
+    }
+}
+
+private val TICK_MINUTES = listOf(1L, 2, 5, 10, 15, 20, 30, 60, 120, 180, 240, 360)
+
+/**
+ * REQ-23: where the time axis of a chart running to [endMillis] is labelled: every whole number of minutes from the
+ * steps 1, 2, 5, 10, 15, 20, 30 minutes and 1, 2, 3, 4, 6 hours, the smallest giving at most 6 labels (aiming at 5),
+ * e.g. every minute for 6 minutes, every 5 minutes for 26 and every 10 minutes for 52. The start (0) is not labelled.
+ */
+fun timeTicks(endMillis: Long): List<Long> {
+    val step = (TICK_MINUTES.firstOrNull { endMillis / (it * MINUTE) <= 6 } ?: TICK_MINUTES.last()) * MINUTE
+    return (step..endMillis step step).toList()
+}
+
+/** REQ-23: a time axis label, e.g. `5 min`, `1 h` or `1 h 30`. */
+fun formatTimeTick(millis: Long): String {
+    val minutes = millis / MINUTE
+    return when {
+        minutes < 60 -> "$minutes min"
+        minutes % 60 == 0L -> "${minutes / 60} h"
+        else -> "${minutes / 60} h ${minutes % 60}"
+    }
+}
+
+/** REQ-23: the altitude of each position of a run's [track] that has one, against active time; empty without altitudes. */
+fun elevationProfile(track: List<List<LocationFix>>): List<ElevationPoint> {
+    var offset = 0L
+    return track.filter { it.isNotEmpty() }.flatMap { segment ->
+        val start = segment.first().timeMillis
+        val points = segment.mapNotNull { fix -> fix.altitudeMeters?.let { ElevationPoint(offset + fix.timeMillis - start, it) } }
+        offset += segment.last().timeMillis - start
+        points
+    }
+}
+
+/** REQ-23: the pace chart's y axis, inverted: [fastestMillis] per km at the top, [slowestMillis] per km at the bottom. */
+data class PaceAxis(val fastestMillis: Long, val slowestMillis: Long)
+
+/**
+ * REQ-23: the pace chart's y axis, so faster stretches get taller bars: the top is the fastest pace rounded down to a whole
+ * minute; the bottom is one minute slower than the slowest pace rounded up, so every bar shows. The slowest pace counts as
+ * at most twice the median pace, so a few slow bars (e.g. standing at a crossing) do not flatten the others. Null without
+ * any pace.
+ */
+fun paceAxis(bars: List<PaceBar>): PaceAxis? {
+    val paces = bars.mapNotNull { it.paceMillisPerKm }.sorted()
+    if (paces.isEmpty()) return null
+    val slowest = minOf(paces.last(), 2 * paces[paces.size / 2])
+    return PaceAxis(paces.first() / MINUTE * MINUTE, (slowest + MINUTE - 1) / MINUTE * MINUTE + MINUTE)
+}

@@ -245,6 +245,7 @@ class TrackingService : Service() {
                     longitude = location.longitude,
                     accuracyMeters = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE,
                     timeMillis = location.time,
+                    altitudeMeters = altitudeOf(location),
                 ),
             )
         }
@@ -254,6 +255,13 @@ class TrackingService : Service() {
             announceKm(kmBefore)
         }
         announceMinute()
+    }
+
+    /** REQ-23: the altitude above sea level when the phone knows it (Android 14+), else above the GPS ellipsoid. */
+    private fun altitudeOf(location: Location): Double? = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && location.hasMslAltitude() -> location.mslAltitudeMeters
+        location.hasAltitude() -> location.altitude
+        else -> null
     }
 
     /** REQ-14: speaks the latest kilometre when one was completed since [kmBefore] and voice notes are on. */

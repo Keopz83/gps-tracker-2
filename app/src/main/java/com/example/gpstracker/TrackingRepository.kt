@@ -3,6 +3,8 @@ package com.example.gpstracker
 import com.example.gpstracker.domain.ActiveRun
 import com.example.gpstracker.domain.RunHistory
 import com.example.gpstracker.domain.RunRecord
+import com.example.gpstracker.domain.RunSummary
+import com.example.gpstracker.domain.runSummary
 import android.content.Context
 import com.example.gpstracker.domain.SessionStats
 import com.example.gpstracker.domain.TrackingSession
@@ -127,6 +129,25 @@ object TrackingRepository {
     suspend fun gpxFiles(filesDir: File, runs: List<RunRecord>): List<File> = withContext(Dispatchers.IO) {
         runs.map { gpxFile(filesDir, it) }.filter { it.exists() }
     }
+
+    // REQ-29: run summaries already read, by run start and the weights they were estimated for.
+    private val summaries = mutableMapOf<Triple<Long, Double, Double>, RunSummary>()
+
+    /**
+     * REQ-29: the climb and calories of each of [runs] (by start), read from their GPX files once and kept for the
+     * weights of the rider and the bike; runs whose file is gone are left out.
+     */
+    suspend fun summaries(filesDir: File, runs: List<RunRecord>, riderKg: Double, bikeKg: Double): Map<Long, RunSummary> =
+        withContext(Dispatchers.IO) {
+            runs.mapNotNull { record ->
+                val key = Triple(record.startMillis, riderKg, bikeKg)
+                val summary = synchronized(summaries) { summaries[key] } ?: run {
+                    val file = gpxFile(filesDir, record).takeIf { it.exists() } ?: return@mapNotNull null
+                    runSummary(record, parseGpxTrack(file.readText()), riderKg, bikeKg).also { synchronized(summaries) { summaries[key] = it } }
+                }
+                record.startMillis to summary
+            }.toMap()
+        }
 
     private fun gpxStart(filesDir: File, run: RunRecord): Pair<Double, Double>? =
         gpxFile(filesDir, run).takeIf { it.exists() }?.let { firstGpxPosition(it.readText()) }

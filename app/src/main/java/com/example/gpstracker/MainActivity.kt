@@ -40,6 +40,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Menu
@@ -236,6 +237,8 @@ private fun TrackerScreen() {
                         onShare = { runs -> scope.launch { shareRuns(context, TrackingRepository.gpxFiles(context.filesDir, runs)) } },
                         onDelete = { TrackingRepository.delete(it, context.filesDir) }, // REQ-18
                     )
+                    // REQ-29: the statistics of the runs by day, week, month or year.
+                    Page.STATS -> StatisticsScreen(runs = history, settings = settings)
                 }
             }
         }
@@ -276,6 +279,7 @@ private fun TrackerScreen() {
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
                 BarIcon(Icons.Filled.Map, "Map", selected = page == Page.MAP) { show(Page.MAP) } // REQ-7
                 BarIcon(Icons.Filled.History, "History", selected = page == Page.HISTORY) { show(Page.HISTORY) } // REQ-9
+                BarIcon(Icons.Filled.BarChart, "Statistics", selected = page == Page.STATS) { show(Page.STATS) } // REQ-29
                 BarIcon(Icons.Filled.Menu, "Settings", selected = page == Page.SETTINGS) { show(Page.SETTINGS) } // REQ-13
             }
         }

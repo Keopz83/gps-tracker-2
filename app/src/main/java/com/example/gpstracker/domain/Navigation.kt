@@ -4,10 +4,11 @@ import kotlin.math.abs
 import kotlin.math.sign
 
 /**
- * REQ-16: the views in swipe order: the front view, then the icons at the bottom from left to right. Swiping right past the
+ * REQ-16: the views in swipe order: the front view, then the icons at the bottom from left to right (REQ-29: the
+ * statistics between the history and the settings). Swiping right past the
  * settings returns to the front view, so the views rotate.
  */
-enum class Page { TRACKER, MAP, HISTORY, SETTINGS }
+enum class Page { TRACKER, MAP, HISTORY, STATS, SETTINGS }
 
 /** REQ-16: the app opens on the front view. */
 val START_PAGE = Page.TRACKER

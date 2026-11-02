@@ -54,6 +54,7 @@ import com.example.gpstracker.domain.formatRunDate
 import com.example.gpstracker.domain.formatSpeed
 import com.example.gpstracker.domain.elevationProfile
 import com.example.gpstracker.domain.paceBars
+import com.example.gpstracker.domain.powerBars
 import com.example.gpstracker.domain.runDetails
 import com.example.gpstracker.domain.runNumber
 import com.example.gpstracker.domain.selectedRuns
@@ -65,12 +66,14 @@ import java.time.ZoneId
  * REQ-17: the map icon of a run shows it on the map; the run shown there is highlighted.
  * REQ-22: a tap opens or closes the details of a run; its share icon shares its GPX file. A long press selects runs
  * (then a tap selects or unselects one), and the share icon at the top right shares the selected runs together.
+ * REQ-28: a cycling run's power is estimated for a rider and bike of [cyclingKg].
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RunHistoryScreen(
     runs: List<RunRecord>,
     selected: RunRecord?,
+    cyclingKg: Double,
     onShowOnMap: (RunRecord) -> Unit,
     onShare: (List<RunRecord>) -> Unit,
     onDelete: (RunRecord) -> Unit,
@@ -113,6 +116,7 @@ fun RunHistoryScreen(
                         number = runNumber(index, runs.size),
                         checked = checked,
                         expanded = expanded == run.startMillis,
+                        cyclingKg = cyclingKg,
                         onShowOnMap = { onShowOnMap(run) },
                         onShare = { onShare(listOf(run)) },
                         onDelete = { deleting = run },
@@ -169,6 +173,7 @@ private fun RunBox(
     number: Int,
     checked: Boolean,
     expanded: Boolean,
+    cyclingKg: Double,
     onShowOnMap: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
@@ -200,13 +205,16 @@ private fun RunBox(
                 }
             }
         }
-        if (expanded) RunDetailsView(run, modifier = Modifier.padding(top = 10.dp, bottom = 14.dp, start = 16.dp, end = 16.dp))
+        if (expanded) RunDetailsView(run, cyclingKg, modifier = Modifier.padding(top = 10.dp, bottom = 14.dp, start = 16.dp, end = 16.dp))
     }
 }
 
-/** REQ-23: the pace chart and the elevation chart of a run, above the time and pace of each kilometre (REQ-22). */
+/**
+ * REQ-23: the pace chart and the elevation chart of a run, above the time and pace of each kilometre (REQ-22).
+ * REQ-28: a cycling run's estimated power chart, for a rider and bike of [cyclingKg], between the two.
+ */
 @Composable
-private fun RunDetailsView(run: RunRecord, modifier: Modifier = Modifier) {
+private fun RunDetailsView(run: RunRecord, cyclingKg: Double, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val track by produceState<List<List<LocationFix>>?>(null, run.startMillis) {
         value = TrackingRepository.loadTrack(context.filesDir, run)
@@ -219,6 +227,11 @@ private fun RunDetailsView(run: RunRecord, modifier: Modifier = Modifier) {
         val style = MaterialTheme.typography.bodyMedium
         PaceChart(bars, run.activityType, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp))
         SectionDivider()
+        if (run.activityType == ActivityType.CYCLING) {
+            val power = remember(shown, cyclingKg) { powerBars(shown, cyclingKg) }
+            PowerChart(power, modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp))
+            SectionDivider()
+        }
         ElevationChart(elevation, modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp))
         SectionDivider()
         details.splits.forEachIndexed { i, millis ->

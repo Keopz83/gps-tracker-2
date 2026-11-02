@@ -20,7 +20,25 @@ fun paceBarMillis(activeMillis: Long): Long = maxOf(1, (activeMillis + MAX_BARS 
  * has no pace. Each step between two positions counts towards the bar its middle falls in. The last, unfinished stretch
  * gets no bar.
  */
-fun paceBars(track: List<List<LocationFix>>): List<PaceBar> {
+fun paceBars(track: List<List<LocationFix>>): List<PaceBar> = stretches(track).map { stretch ->
+    val pace = if (stretch.meters >= MIN_BAR_METERS) Math.round(stretch.movingMillis * 1000.0 / stretch.meters) else null
+    PaceBar(stretch.startMillis, stretch.endMillis, pace)
+}
+
+/**
+ * REQ-23, REQ-28: what was covered in one bar of the charts: the distance, the time spent on it and the net change of
+ * altitude (counting only steps between two positions with an altitude).
+ */
+internal class Stretch(val startMillis: Long, val endMillis: Long, val meters: Double, val movingMillis: Long, val riseMeters: Double)
+
+/** REQ-23: a bar covering less than this many metres has no pace (or power, REQ-28). */
+internal const val MIN_BAR_METERS = 10.0
+
+/**
+ * REQ-23, REQ-28: the full stretches of [paceBarMillis] active time of a run's [track]. Each step between two positions
+ * counts towards the stretch its middle falls in. The last, unfinished stretch is left out.
+ */
+internal fun stretches(track: List<List<LocationFix>>): List<Stretch> {
     val segments = track.filter { it.size > 1 }
     val activeMillis = segments.sumOf { it.last().timeMillis - it.first().timeMillis }
     val barMillis = paceBarMillis(activeMillis)
@@ -28,6 +46,7 @@ fun paceBars(track: List<List<LocationFix>>): List<PaceBar> {
     if (count == 0) return emptyList()
     val meters = DoubleArray(count)
     val millis = LongArray(count)
+    val rise = DoubleArray(count)
     var offset = 0L
     segments.forEach { segment ->
         val start = segment.first().timeMillis
@@ -37,14 +56,12 @@ fun paceBars(track: List<List<LocationFix>>): List<PaceBar> {
             if (bar < count) {
                 meters[bar] += haversineMeters(from, to)
                 millis[bar] += to.timeMillis - from.timeMillis
+                if (from.altitudeMeters != null && to.altitudeMeters != null) rise[bar] += to.altitudeMeters - from.altitudeMeters
             }
         }
         offset += segment.last().timeMillis - start
     }
-    return (0 until count).map { i ->
-        val pace = if (meters[i] >= 10) Math.round(millis[i] * 1000.0 / meters[i]) else null
-        PaceBar(i * barMillis, (i + 1) * barMillis, pace)
-    }
+    return (0 until count).map { i -> Stretch(i * barMillis, (i + 1) * barMillis, meters[i], millis[i], rise[i]) }
 }
 
 private val TICK_MINUTES = listOf(1L, 2, 5, 10, 15, 20, 30, 60, 120, 180, 240, 360)

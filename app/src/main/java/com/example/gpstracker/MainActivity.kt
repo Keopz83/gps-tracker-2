@@ -227,6 +227,7 @@ private fun TrackerScreen() {
                     Page.HISTORY -> RunHistoryScreen(
                         runs = history,
                         selected = shownRun,
+                        cyclingKg = settings.cyclingKg, // REQ-28
                         onShowOnMap = {
                             selectedStart = it.startMillis
                             show(Page.MAP)

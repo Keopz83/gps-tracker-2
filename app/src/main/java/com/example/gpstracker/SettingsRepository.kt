@@ -27,6 +27,8 @@ object SettingsRepository {
             screenOnNote = prefs.getBoolean(KEY_SCREEN_ON_NOTE, defaults.screenOnNote),
             longDistance = prefs.getBoolean(KEY_LONG_DISTANCE, defaults.longDistance),
             longDistanceSeconds = prefs.getInt(KEY_LONG_DISTANCE_SECONDS, defaults.longDistanceSeconds),
+            riderKg = prefs.getInt(KEY_RIDER_KG, defaults.riderKg),
+            bikeKg = prefs.getInt(KEY_BIKE_KG, defaults.bikeKg),
         )
     }
 
@@ -39,6 +41,8 @@ object SettingsRepository {
             .putBoolean(KEY_SCREEN_ON_NOTE, settings.screenOnNote)
             .putBoolean(KEY_LONG_DISTANCE, settings.longDistance)
             .putInt(KEY_LONG_DISTANCE_SECONDS, settings.longDistanceSeconds)
+            .putInt(KEY_RIDER_KG, settings.riderKg)
+            .putInt(KEY_BIKE_KG, settings.bikeKg)
             .apply()
         _settings.value = settings
     }
@@ -53,4 +57,6 @@ object SettingsRepository {
     private const val KEY_SCREEN_ON_NOTE = "screenOnNote"
     private const val KEY_LONG_DISTANCE = "longDistance"
     private const val KEY_LONG_DISTANCE_SECONDS = "longDistanceSeconds"
+    private const val KEY_RIDER_KG = "riderKg"
+    private const val KEY_BIKE_KG = "bikeKg"
 }

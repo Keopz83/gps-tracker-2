@@ -34,8 +34,10 @@ import com.example.gpstracker.domain.ActivityType
 import com.example.gpstracker.domain.ElevationPoint
 import com.example.gpstracker.domain.climb
 import com.example.gpstracker.domain.PaceBar
+import com.example.gpstracker.domain.PowerBar
 import com.example.gpstracker.domain.formatTimeTick
 import com.example.gpstracker.domain.paceAxis
+import com.example.gpstracker.domain.powerAxis
 import com.example.gpstracker.domain.speedAxis
 import com.example.gpstracker.domain.timeTicks
 import java.util.Locale
@@ -77,7 +79,7 @@ private fun JoggingPaceChart(bars: List<PaceBar>, modifier: Modifier) = Column(m
         bars.forEach { bar ->
             val pace = bar.paceMillisPerKm ?: return@forEach
             val top = y(pace.coerceIn(axis.fastestMillis, axis.slowestMillis))
-            bar(bar, top, end, plot)
+            bar(bar.startMillis, bar.endMillis, top, end, plot)
         }
         timeAxis(measurer, end, plot)
     }
@@ -105,16 +107,47 @@ private fun SpeedChart(bars: List<PaceBar>, modifier: Modifier) = Column(modifie
         }
         bars.forEach { bar ->
             val speed = bar.speedKmh ?: return@forEach
-            bar(bar, y(speed.coerceAtMost(axis.topKmh.toDouble())), end, plot)
+            bar(bar.startMillis, bar.endMillis, y(speed.coerceAtMost(axis.topKmh.toDouble())), end, plot)
         }
         timeAxis(measurer, end, plot)
     }
 }
 
-/** One bar of the pace or speed chart, from [top] down to the time axis. */
-private fun DrawScope.bar(bar: PaceBar, top: Float, end: Long, plot: PlotArea) {
-    val left = plot.left + plot.width * bar.startMillis / end
-    val width = plot.width * (bar.endMillis - bar.startMillis) / end
+/**
+ * REQ-28: the estimated power of each stretch of a cycling run, as bars from 0 W at the bottom against the same active
+ * time as the speed chart.
+ */
+@Composable
+fun PowerChart(bars: List<PowerBar>, modifier: Modifier = Modifier) = Column(modifier = modifier) {
+    Text("Power (W, estimated)", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = 8.dp))
+    val axis = powerAxis(bars)
+    if (axis == null) {
+        Text("No power data", style = MaterialTheme.typography.bodySmall)
+        return@Column
+    }
+    val measurer = rememberTextMeasurer()
+    val end = bars.last().endMillis
+    Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+        val plot = plotArea()
+        // A grid line every 100 W (every 200 W above 600 W).
+        fun y(watts: Double) = plot.bottom - (plot.height * watts / axis.topWatts).toFloat()
+        val step = if (axis.topWatts > 600) 200 else 100
+        for (watts in 0..axis.topWatts step step) {
+            drawLine(GRID, Offset(plot.left, y(watts.toDouble())), Offset(plot.right, y(watts.toDouble())))
+            yLabel(measurer, "$watts", y(watts.toDouble()))
+        }
+        bars.forEach { bar ->
+            val watts = bar.watts ?: return@forEach
+            bar(bar.startMillis, bar.endMillis, y(watts), end, plot)
+        }
+        timeAxis(measurer, end, plot)
+    }
+}
+
+/** One bar of the pace, speed or power chart, from [top] down to the time axis. */
+private fun DrawScope.bar(startMillis: Long, endMillis: Long, top: Float, end: Long, plot: PlotArea) {
+    val left = plot.left + plot.width * startMillis / end
+    val width = plot.width * (endMillis - startMillis) / end
     drawRect(
         Color.White.copy(alpha = 0.85f),
         topLeft = Offset(left + 1f, top),

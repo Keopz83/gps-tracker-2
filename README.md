@@ -72,6 +72,7 @@ Summit is an Android app that records your route, distance, time and speed while
 - `app/src/main/java/com/example/gpstracker/domain` — platform-independent tracking logic (session, filtering, distance, formatting, permissions).
 - `app/src/main/java/com/example/gpstracker` — Android layer: `TrackingService` (foreground location service), `TrackingRepository` (shared state) and `MainActivity` (Compose UI).
 - `app/src/test` — JVM unit tests; each test name starts with the requirement it covers (e.g. `REQ-3 ...`).
+- `test-support` — scripts for manual testing on a device, e.g. `seed_runs.py`.
 
 ## Build & test
 
@@ -105,5 +106,11 @@ If `java` is not on your path, point Gradle at a JDK 17 first, e.g. `export JAVA
    adb shell am start -n com.example.gpstracker/.MainActivity
    ```
    `./gradlew installDebug` builds and installs in one step. With several devices connected, add `-s <serial>` to the `adb` commands (or set `ANDROID_SERIAL`).
+
+To try the history (REQ-9) on a fresh device or emulator, seed it with 8 dummy jogging and cycling runs (needs the debug build installed; `--replace` overwrites an existing history):
+
+```sh
+python3 test-support/seed_runs.py [-s <serial>] [--replace]
+```
 
 Reinstalling stops a running tracking session. On first start, grant precise location (and notifications) when asked. The route map needs an internet connection for its map tiles.
